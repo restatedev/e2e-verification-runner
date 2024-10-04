@@ -1,4 +1,4 @@
-# node-services
+# Verification Runner
 
 ## Install and build
 
@@ -18,15 +18,7 @@ $ npm run build
 A node services Docker image is used by the verification tests in Kubernetes.
 
 ```shell
-$ docker build --platform linux/arm64,linux/amd64 -t ghcr.io/restatedev/e2e-node-services --push .
-```
-
-## Run proto code generation
-
-To re-gen the `generated` directory:
-
-```shell
-$ npm run proto
+$ docker build --platform linux/arm64,linux/amd64 -t ghcr.io/restatedev/e2e-verification-runner --push .
 ```
 
 ## Lint and format
@@ -39,10 +31,16 @@ $ npm run format
 
 ## Running the services
 
-The Node services can be run via:
+### As a webapp
 
 ```shell
-SERVICES=<COMMA_SEPARATED_LIST_OF_SERVICES> gradle npm_run_app 
+SERVICES=InterpreterDriver node dist/app.js
 ```
 
-For the list of supported services see [here](src/app.ts).
+## As a standalone job
+
+```shell
+SERVICES=InterpreterDriverJob node dist/app.js
+```
+
+## See [scripts/run.sh](scripts/run.sh)
