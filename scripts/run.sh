@@ -20,6 +20,8 @@ export INTERPRETER_DRIVER_CONF=$(cat <<-EOF
 EOF
 )
 
+docker pull ghcr.io/restatedev/e2e-verification-runner:main
+
 docker run \
 	--net host\
 	-v /var/run/docker.sock:/var/run/docker.sock	\
@@ -30,4 +32,5 @@ docker run \
 	--env DEBUG \
 	--env INTERPRETER_DRIVER_CONF \
 	ghcr.io/restatedev/e2e-verification-runner:main 2>&1 | grep -v "undefined is not a number, but it still has feelings"
+
 
