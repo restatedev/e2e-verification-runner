@@ -8,9 +8,7 @@
 // https://github.com/restatedev/e2e/blob/main/LICENSE
 
 import { Program, CommandType } from "./commands";
-import {
-  interpreterObjectForLayer,
-} from "./interpreter";
+import { interpreterObjectForLayer } from "./interpreter";
 import { Random } from "./random";
 import { setupContainers, tearDown, TestEnvironment } from "./test_containers";
 import { ProgramGenerator } from "./test_generator";
@@ -49,7 +47,7 @@ class StateTracker {
 
   constructor(
     private readonly numLayers: number,
-    private readonly numInterpreters: number
+    private readonly numInterpreters: number,
   ) {
     for (let i = 0; i < numLayers; i++) {
       const layerState = [];
@@ -107,7 +105,7 @@ export class Test {
     const gen = new ProgramGenerator(
       this.random,
       this.conf.keys,
-      this.conf.maxProgramSize
+      this.conf.maxProgramSize,
     );
 
     const keys = this.conf.keys;
@@ -167,7 +165,7 @@ export class Test {
       });
       if (!res.ok) {
         throw new Error(
-          `unable to register ${uri} because: ${await res.text()}`
+          `unable to register ${uri} because: ${await res.text()}`,
         );
       }
     }
@@ -228,14 +226,14 @@ export class Test {
         console.log("Killing restate");
         await container.restart({ timeout: 1 });
         const newIngressUrl = `http://${container.getHost()}:${container.getMappedPort(
-          8080
+          8080,
         )}`;
         const newAdminUrl = `http://${container.getHost()}:${container.getMappedPort(
-          9070
+          9070,
         )}`;
         ingress = restate.connect({ url: newIngressUrl });
         console.log(
-          `Restate is back:\ningress: ${newIngressUrl}\nadmin:  ${newAdminUrl}`
+          `Restate is back:\ningress: ${newIngressUrl}\nadmin:  ${newAdminUrl}`,
         );
       }
     };
@@ -253,7 +251,7 @@ export class Test {
             program,
             restate.SendOpts.from({
               idempotencyKey: key,
-            })
+            }),
           );
         });
       });
@@ -297,7 +295,7 @@ export class Test {
 
   async verifyLayer(
     ingress: restate.Ingress,
-    layerId: number
+    layerId: number,
   ): Promise<boolean> {
     console.log(`Trying to verify layer ${layerId}`);
 
@@ -308,7 +306,7 @@ export class Test {
       const futures = layerChunk.map(async ({ expected, id }) => {
         const actual = await retry(
           async () =>
-            await ingress.objectClient(interpreterLn, `${id}`).counter()
+            await ingress.objectClient(interpreterLn, `${id}`).counter(),
         );
         return { expected, actual, id };
       });
@@ -316,7 +314,7 @@ export class Test {
       for await (const { expected, actual, id } of futures) {
         if (expected !== actual) {
           console.log(
-            `Found a mismatch at layer ${layerId} interpreter ${id}. Expected ${expected} but got ${actual}. This is expected, this interpreter might still have some backlog to process, and eventually it will catchup with the desired value. Will retry in few seconds.`
+            `Found a mismatch at layer ${layerId} interpreter ${id}. Expected ${expected} but got ${actual}. This is expected, this interpreter might still have some backlog to process, and eventually it will catchup with the desired value. Will retry in few seconds.`,
           );
           return false;
         }

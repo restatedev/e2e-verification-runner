@@ -89,7 +89,7 @@ export async function setupContainers(): Promise<TestEnvironment> {
     .start();
 
   const services = new GenericContainer(
-    "ghcr.io/restatedev/e2e-node-services:main"
+    "ghcr.io/restatedev/e2e-node-services:main",
   )
     .withNetwork(network)
     .withNetworkAliases("services")
@@ -110,10 +110,10 @@ export async function setupContainers(): Promise<TestEnvironment> {
   const servicesContainer = await services;
 
   const ingressUrl = `http://${restateContainer.getHost()}:${restateContainer.getMappedPort(
-    8080
+    8080,
   )}`;
   const adminUrl = `http://${restateContainer.getHost()}:${restateContainer.getMappedPort(
-    9070
+    9070,
   )}`;
 
   return {

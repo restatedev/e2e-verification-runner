@@ -16,12 +16,11 @@ export type InterpreterId = {
 };
 
 export const interpreterObjectForLayer = (
-  layer: number
+  layer: number,
 ): restate.VirtualObjectDefinition<string, InterpreterObject> => {
   const name = `ObjectInterpreterL${layer}`;
   return { name };
 };
-
 
 interface InterpreterObject {
   counter(ctx: unknown): Promise<number>;

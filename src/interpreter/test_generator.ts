@@ -104,7 +104,7 @@ export class ProgramGenerator {
   constructor(
     readonly rand: Random,
     readonly interpreterCount: number,
-    readonly maximumCommandCount: number
+    readonly maximumCommandCount: number,
   ) {}
 
   random(low: number, high: number): number {
@@ -113,7 +113,7 @@ export class ProgramGenerator {
 
   generateCommand(
     commandType: CommandType,
-    currentLevel: number
+    currentLevel: number,
   ): Command | null {
     if (commandType == CommandType.SET_STATE) {
       return {

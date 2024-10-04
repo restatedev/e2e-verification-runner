@@ -7,8 +7,10 @@
 // directory of this repository or package, or at
 // https://github.com/restatedev/e2e/blob/main/LICENSE
 
-
-import { interpreterDriver, interpreterDriverJob } from "./interpreter/entry_point";
+import {
+  interpreterDriver,
+  interpreterDriverJob,
+} from "./interpreter/entry_point";
 
 const services = (process.env.SERVICES ?? "").split(",");
 

@@ -36,7 +36,7 @@ export class Random {
     const result: bigint =
       (Random.rotl(
         (this.randstate256[0] + this.randstate256[3]) & Random.U64_MASK,
-        23n
+        23n,
       ) +
         this.randstate256[0]) &
       Random.U64_MASK;
@@ -71,15 +71,18 @@ export class WeightedRandom<T> {
   private readonly cdf: number[];
 
   static from<K extends number | string | symbol>(
-    items: Record<K, number>
+    items: Record<K, number>,
   ): WeightedRandom<K> {
     return new WeightedRandom<K>(
       Object.keys(items) as K[],
-      Object.values(items)
+      Object.values(items),
     );
   }
 
-  constructor(private readonly items: T[], ranks: number[]) {
+  constructor(
+    private readonly items: T[],
+    ranks: number[],
+  ) {
     // compute PDF
     let sum = 0;
     for (const n of ranks) {

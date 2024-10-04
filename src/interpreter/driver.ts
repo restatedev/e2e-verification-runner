@@ -45,7 +45,7 @@ export const createServer = (port: number) => {
         writeJsonResponse(
           200,
           { status: TEST?.testStatus() ?? TestStatus.NOT_STARTED },
-          res
+          res,
         );
       } else if (url === "/sample") {
         const conf = await readJson<TestConfiguration>(req);
@@ -59,7 +59,7 @@ export const createServer = (port: number) => {
           writeJsonResponse(
             400,
             { cause: "please specify at least one test" },
-            res
+            res,
           );
         }
       } else {
@@ -80,7 +80,7 @@ async function readJson<T>(req: http.IncomingMessage): Promise<T> {
 function writeJsonResponse(
   code: number,
   body: unknown,
-  res: http.ServerResponse<http.IncomingMessage>
+  res: http.ServerResponse<http.IncomingMessage>,
 ) {
   res.writeHead(code, { "Content-Type": "application/json" });
   res.write(JSON.stringify(body));
