@@ -9,6 +9,7 @@
 
 import {
   GenericContainer,
+  ImagePullPolicy,
   Network,
   PullPolicy,
   StartedNetwork,
@@ -32,9 +33,15 @@ export interface Containers {
 }
 
 export async function setupContainers(): Promise<TestEnvironment> {
+  const restateImage =
+    process.env.RESTATE_CONTAINER_IMAGE ?? "ghcr.io/restatedev/restate:main";
+  const sdkImage =
+    process.env.SERVICES_CONTAINER_IMAGE ??
+    "localhost/restatedev/test-services:latest";
+
   const network = await new Network().start();
 
-  const restate = new GenericContainer("ghcr.io/restatedev/restate:main")
+  const restate = new GenericContainer(restateImage)
     .withExposedPorts(8080, 9070)
     .withNetwork(network)
     .withNetworkAliases("restate")
@@ -49,10 +56,16 @@ export async function setupContainers(): Promise<TestEnvironment> {
     })
     .start();
 
-  const zero = new GenericContainer("ghcr.io/restatedev/e2e-node-services:main")
+  const neverPoll: ImagePullPolicy = {
+    shouldPull: function (): boolean {
+      return false;
+    },
+  };
+
+  const zero = new GenericContainer(sdkImage)
     .withNetwork(network)
     .withNetworkAliases("interpreter_zero")
-    .withPullPolicy(PullPolicy.alwaysPull())
+    .withPullPolicy(neverPoll)
     .withEnvironment({
       PORT: "9000",
       RESTATE_LOGGING: "ERROR",
@@ -61,11 +74,10 @@ export async function setupContainers(): Promise<TestEnvironment> {
     })
     .start();
 
-  const one = new GenericContainer("ghcr.io/restatedev/e2e-node-services:main")
+  const one = new GenericContainer(sdkImage)
     .withNetwork(network)
     .withNetworkAliases("interpreter_one")
-    .withPullPolicy(PullPolicy.alwaysPull())
-
+    .withPullPolicy(neverPoll)
     .withExposedPorts(9001)
     .withEnvironment({
       PORT: "9001",
@@ -75,10 +87,10 @@ export async function setupContainers(): Promise<TestEnvironment> {
     })
     .start();
 
-  const two = new GenericContainer("ghcr.io/restatedev/e2e-node-services:main")
+  const two = new GenericContainer(sdkImage)
     .withNetwork(network)
     .withNetworkAliases("interpreter_two")
-    .withPullPolicy(PullPolicy.alwaysPull())
+    .withPullPolicy(neverPoll)
     .withExposedPorts(9002)
     .withEnvironment({
       PORT: "9002",
@@ -88,12 +100,10 @@ export async function setupContainers(): Promise<TestEnvironment> {
     })
     .start();
 
-  const services = new GenericContainer(
-    "ghcr.io/restatedev/e2e-node-services:main",
-  )
+  const services = new GenericContainer(sdkImage)
     .withNetwork(network)
     .withNetworkAliases("services")
-    .withPullPolicy(PullPolicy.alwaysPull())
+    .withPullPolicy(neverPoll)
     .withExposedPorts(9003)
     .withEnvironment({
       PORT: "9003",
