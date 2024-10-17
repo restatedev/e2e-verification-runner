@@ -31,7 +31,7 @@ const L0 = distribution([
   [
     CommandType.INCREMENT_STATE_COUNTER_INDIRECTLY,
     CommandType.CALL_SERVICE,
-    CommandType.CALL_NEXT_LAYER_OBJECT,
+    // CommandType.CALL_NEXT_LAYER_OBJECT,
   ],
   [
     CommandType.INCREMENT_STATE_COUNTER_VIA_AWAKEABLE,
@@ -39,9 +39,13 @@ const L0 = distribution([
     CommandType.REJECT_AWAKEABLE,
   ],
   [
+    // CommandType.THROWING_SIDE_EFFECT, 
     CommandType.RECOVER_TERMINAL_CALL],
   [
+    // CommandType.CALL_SLOW_SERVICE,
     CommandType.SLOW_SIDE_EFFECT,
+    // CommandType.SLEEP,
+    // CommandType.INCREMENT_VIA_DELAYED_CALL,
     CommandType.RECOVER_TERMINAL_MAYBE_UN_AWAITED,
   ],
 ]);
@@ -49,60 +53,12 @@ const L0 = distribution([
 /**
  * L1 distribution represents the commands with their 'rank' (~ likelihood to appear)
  */
-const L1 = distribution([
-  [
-    CommandType.GET_STATE,
-    CommandType.SET_STATE,
-    CommandType.CLEAR_STATE,
-    CommandType.SIDE_EFFECT,
-    CommandType.INCREMENT_STATE_COUNTER,
-  ],
-  [
-    CommandType.INCREMENT_STATE_COUNTER_INDIRECTLY,
-    CommandType.CALL_SERVICE,
-    CommandType.CALL_NEXT_LAYER_OBJECT,
-  ],
-  [
-    CommandType.INCREMENT_STATE_COUNTER_VIA_AWAKEABLE,
-    CommandType.RESOLVE_AWAKEABLE,
-    CommandType.REJECT_AWAKEABLE,
-  ],
-  [
-    CommandType.RECOVER_TERMINAL_CALL],
-  [
-    CommandType.SLOW_SIDE_EFFECT,
-    CommandType.RECOVER_TERMINAL_MAYBE_UN_AWAITED,
-  ],
-]);
+const L1 = L0;
 
 /**
  * L2 distribution represents the commands with their 'rank' (~ likelihood to appear)
  */
-const L2 = distribution([
-  [
-    CommandType.GET_STATE,
-    CommandType.SET_STATE,
-    CommandType.CLEAR_STATE,
-    CommandType.SIDE_EFFECT,
-    CommandType.INCREMENT_STATE_COUNTER,
-  ],
-  [
-    CommandType.INCREMENT_STATE_COUNTER_INDIRECTLY,
-    CommandType.CALL_SERVICE,
-    CommandType.CALL_NEXT_LAYER_OBJECT,
-  ],
-  [
-    CommandType.INCREMENT_STATE_COUNTER_VIA_AWAKEABLE,
-    CommandType.RESOLVE_AWAKEABLE,
-    CommandType.REJECT_AWAKEABLE,
-  ],
-  [
-    CommandType.RECOVER_TERMINAL_CALL],
-  [
-    CommandType.SLOW_SIDE_EFFECT,
-    CommandType.RECOVER_TERMINAL_MAYBE_UN_AWAITED,
-  ],
-]);
+const L2 = L0;
 
 const MAX_NUMBER_OF_LEVELS = 3;
 const DISTRIBUTION_BY_LEVEL = [L0, L1, L2];
@@ -197,7 +153,7 @@ export class ProgramGenerator {
     const promises: number[] = [];
     const rand = this.rand;
     for (let i = 0; i < numCommands; i++) {
-      const commandType = L0.next(rand);
+      const commandType = DISTRIBUTION_BY_LEVEL[currentLevel].next(rand);
       const command = this.generateCommand(commandType, currentLevel);
       if (command === null) {
         continue;
