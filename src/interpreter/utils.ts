@@ -33,7 +33,7 @@ export const sleep = (duration: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, duration));
 
 export const timeout = <T>(duration: number): Promise<T> =>
-  new Promise((_resolve, rejected) => setTimeout(rejected, duration));
+  new Promise((_resolve, rejected) => setTimeout(() => rejected("timeout"), duration));
 
 export const retry = async <T>(op: () => Promise<T>): Promise<T> => {
   let error;

@@ -14,7 +14,7 @@ export INTERPRETER_DRIVER_CONF=$(cat <<-EOF
 	"tests" : 100,
 	"maxProgramSize"	:  20,
 	"bootstrap"				: false,
-	"ingress" : ["http://localhost:8080", "http://localhost:8081", "http://localhost:8082"]
+	"ingress" : ["http://localhost:8080"]
 }
 EOF
 )

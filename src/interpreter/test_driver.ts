@@ -118,7 +118,7 @@ export class Test {
   }
 
   async ingressReady(ingressUrl: string) {
-    for (;;) {
+    for (; ;) {
       try {
         const rc = await fetch(`${ingressUrl}/restate/health`);
         if (rc.ok) {
@@ -140,7 +140,7 @@ export class Test {
     if (!deployments) {
       throw new Error("Missing register.deployments (array of uri string)");
     }
-    for (;;) {
+    for (; ;) {
       try {
         const rc = await fetch(`${adminUrl}/health`);
         if (rc.ok) {
@@ -188,7 +188,7 @@ export class Test {
     console.log(this.conf);
     this.status = TestStatus.RUNNING;
     const ingressUrls = this.conf.ingress;
-    const ingresses = ingressUrls.map((url) =>  restate.connect({ url }));
+    const ingresses = ingressUrls.map((url) => restate.connect({ url }));
 
     console.log("Generating ...");
 
@@ -257,6 +257,7 @@ export class Test {
     const interpreterLn = interpreterObjectForLayer(layerId);
 
     for (const layerChunk of batch(iterate(layer), 256)) {
+      console.log(`Validating chunk of ${layerChunk.length} interpreters`);
       const futures = layerChunk.map(async ({ expected, id }) => {
         const actual = await retry(
           async () => {
