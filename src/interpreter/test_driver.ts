@@ -24,7 +24,7 @@ export interface TestConfigurationDeployments {
 }
 
 export interface TestConfiguration {
-  readonly ingress: string;
+  readonly ingress: string[];
   readonly seed: string;
   readonly keys: number;
   readonly tests: number;
@@ -187,58 +187,10 @@ export class Test {
   async startTesting(): Promise<TestStatus> {
     console.log(this.conf);
     this.status = TestStatus.RUNNING;
-
-    if (this.conf.bootstrap) {
-      this.containers = await setupContainers();
-      console.log(this.containers);
-    }
-    const ingressUrl = this.containers?.ingressUrl ?? this.conf.ingress;
-    const adminUrl = this.containers?.adminUrl ?? this.conf.register?.adminUrl;
-    const deployments =
-      this.containers?.services ?? this.conf.register?.deployments;
-
-    let ingress = restate.connect({ url: ingressUrl });
-
-    if (deployments) {
-      await this.registerEndpoints(adminUrl, deployments);
-    }
-    await this.ingressReady(ingressUrl);
+    const ingressUrls = this.conf.ingress;
+    const ingresses = ingressUrls.map((url) =>  restate.connect({ url }));
 
     console.log("Generating ...");
-
-    const killRestate = async () => {
-      const container = this.containers?.containers.restateContainer;
-      if (!container) {
-        return;
-      }
-      const interval = this.conf.crashInterval;
-      if (!interval) {
-        return;
-      }
-      for (;;) {
-        await sleep(interval);
-        if (
-          this.status == TestStatus.FAILED ||
-          this.status == TestStatus.FINISHED
-        ) {
-          break;
-        }
-        console.log("Killing restate");
-        await container.restart({ timeout: 1 });
-        const newIngressUrl = `http://${container.getHost()}:${container.getMappedPort(
-          8080,
-        )}`;
-        const newAdminUrl = `http://${container.getHost()}:${container.getMappedPort(
-          9070,
-        )}`;
-        ingress = restate.connect({ url: newIngressUrl });
-        console.log(
-          `Restate is back:\ningress: ${newIngressUrl}\nadmin:  ${newAdminUrl}`,
-        );
-      }
-    };
-
-    killRestate().catch(console.error);
 
     let idempotencyKey = 1;
     for (const b of batch(this.generate(), 32)) {
@@ -246,6 +198,8 @@ export class Test {
         idempotencyKey += 1;
         const key = `${idempotencyKey}`;
         return retry(() => {
+          // select one ingress at random
+          const ingress = ingresses[Math.floor(Math.random() * ingresses.length)];
           const client = ingress.objectSendClient(InterpreterL0, `${id}`);
           return client.interpret(
             program,
@@ -270,7 +224,7 @@ export class Test {
 
     for (const layerId of [0, 1, 2]) {
       try {
-        while (!(await this.verifyLayer(ingress, layerId))) {
+        while (!(await this.verifyLayer(ingresses, layerId))) {
           await sleep(10 * 1000);
         }
       } catch (e) {
@@ -294,7 +248,7 @@ export class Test {
   }
 
   async verifyLayer(
-    ingress: restate.Ingress,
+    ingresses: restate.Ingress[],
     layerId: number,
   ): Promise<boolean> {
     console.log(`Trying to verify layer ${layerId}`);
@@ -305,8 +259,10 @@ export class Test {
     for (const layerChunk of batch(iterate(layer), 256)) {
       const futures = layerChunk.map(async ({ expected, id }) => {
         const actual = await retry(
-          async () =>
-            await ingress.objectClient(interpreterLn, `${id}`).counter(),
+          async () => {
+            const ingress = ingresses[Math.floor(Math.random() * ingresses.length)];
+            return await ingress.objectClient(interpreterLn, `${id}`).counter();
+          },
         );
         return { expected, actual, id };
       });
