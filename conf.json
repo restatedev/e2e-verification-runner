@@ -1,0 +1,7 @@
+{
+	"bootstrap" : true,
+  "seed" : "foo",
+  "keys" : 100000 ,
+  "tests" : 100000,
+  "maxProgramSize" : 20
+}

@@ -16,6 +16,8 @@ import { ProgramGenerator } from "./test_generator";
 
 import * as restate from "@restatedev/restate-sdk-clients";
 import { batch, iterate, retry, sleep } from "./utils";
+import { send } from "process";
+import { sendInterpreter } from "./raw_client";
 
 const MAX_LAYERS = 3;
 
@@ -131,7 +133,7 @@ export class Test {
       console.log(`Waiting for ${ingressUrl} to be healthy...`);
       await sleep(2000);
     }
-    console.log(`Ingress is ready.`);
+    console.log(`Ingress is ready. ${ingressUrl}`);
   }
 
   async registerEndpoints(adminUrl?: string, deployments?: string[]) {
@@ -154,6 +156,7 @@ export class Test {
       await sleep(2000);
     }
     console.log(`Admin is ready. ${adminUrl}`);
+    console.log(`RESTATE_ADMIN_URL=${adminUrl} ./target/debug/restate inv ls`);
     for (const uri of deployments) {
       const res = await fetch(`${adminUrl}/deployments`, {
         method: "POST",
@@ -194,15 +197,15 @@ export class Test {
       await this.containers.start();
       console.log(this.containers);
     }
-    let ingressUrl;
+    let ingressUrls;
     if (this.containers) {
-      ingressUrl = [
+      ingressUrls = [
         this.containers.hostContainerUrl("n1", 8080),
         this.containers.hostContainerUrl("n2", 8080),
         this.containers.hostContainerUrl("n3", 8080),
       ];
     } else {
-      ingressUrl = [this.conf.ingress];
+      ingressUrls = [this.conf.ingress];
     }
     const adminUrl =
       this.containers?.hostContainerUrl("n1", 9070) ??
@@ -218,11 +221,11 @@ export class Test {
         `http://services:9003`,
       ];
     }
-    const ingress = ingressUrl.map((url) => restate.connect({ url }));
+    const ingress = ingressUrls.map((url) => restate.connect({ url }));
     if (deployments) {
       await this.registerEndpoints(adminUrl, deployments);
     }
-    for (const url of ingressUrl) {
+    for (const url of ingressUrls) {
       await this.ingressReady(url);
     }
 
@@ -254,9 +257,9 @@ export class Test {
         console.log(`Restate is back: ${victimName}`);
         // update ingress
         for (let i = 0; i < ingress.length; i++) {
-          ingress[i] = restate.connect({
-            url: this.containers.hostContainerUrl(`n${i + 1}`, 8080),
-          });
+          const url = this.containers.hostContainerUrl(`n${i + 1}`, 8080);
+          ingressUrls[i] = url;
+          ingress[i] = restate.connect({ url });
         }
       }
     };
@@ -271,7 +274,14 @@ export class Test {
         return retry({
           op: () => {
             const server = Math.floor(Math.random() * ingress.length);
-            const ing = ingress[server];
+            const url = ingressUrls[server];
+            return sendInterpreter({
+              ingressUrl: url,
+              interpreterId: `${id}`,
+              idempotencyKey: key,
+              program,
+            });
+            /*const ing = ingress[server];
             const client = ing.objectSendClient(InterpreterL0, `${id}`);
             return client.interpret(
               program,
@@ -279,6 +289,7 @@ export class Test {
                 idempotencyKey: key,
               }),
             );
+            */
           },
           timeout: 100,
           tag: `send ${key}`,
@@ -288,7 +299,7 @@ export class Test {
       b.forEach(({ id, program }) => this.stateTracker.update(0, id, program));
       try {
         await Promise.all(promises);
-        console.log(`Sent ${b.length} programs`);
+        console.log(`\x1b[33m Send ${b.length} programs \x1b[0m`);
       } catch (e) {
         console.error(e);
         throw e;
