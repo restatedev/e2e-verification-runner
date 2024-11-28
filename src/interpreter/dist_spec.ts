@@ -9,8 +9,11 @@
 
 import { ClusterSpec, ContainerSpec } from "./infra";
 
+const RESTATE_IMAGE =
+  process.env.RESTATE_IMAGE ?? "ghcr.io/restatedev/restate:main";
+
 export const RESTATE_LEADER: ContainerSpec = {
-  image: "ghcr.io/restatedev/restate:main",
+  image: RESTATE_IMAGE,
   name: "n1",
   ports: [8080, 9070, 5122, 5123],
   pull: "always",
@@ -28,7 +31,7 @@ export const RESTATE_LEADER: ContainerSpec = {
 export const RESTATE_FOLLOWER = (n: number): ContainerSpec => {
   const name = `n${n + 2}`; // followers start at 2, leader is 1.
   return {
-    image: "ghcr.io/restatedev/restate:main",
+    image: RESTATE_IMAGE,
     name,
     ports: [8080],
     pull: "always",
