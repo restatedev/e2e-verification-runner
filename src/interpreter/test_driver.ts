@@ -10,7 +10,8 @@
 import { Program, CommandType } from "./commands";
 import { interpreterObjectForLayer } from "./interpreter";
 import { Random } from "./random";
-import { setupContainers, tearDown, TestEnvironment } from "./test_containers";
+import { Cluster, createCluster } from "./infra";
+import { CLUSTER } from "./dist_spec";
 import { ProgramGenerator } from "./test_generator";
 
 import * as restate from "@restatedev/restate-sdk-clients";
@@ -89,7 +90,7 @@ export class Test {
   readonly stateTracker: StateTracker;
 
   status: TestStatus = TestStatus.NOT_STARTED;
-  containers: TestEnvironment | undefined = undefined;
+  containers: Cluster | undefined = undefined;
 
   constructor(readonly conf: TestConfiguration) {
     this.random = new Random(conf.seed);
@@ -152,7 +153,7 @@ export class Test {
       console.log(`Waiting for ${adminUrl} to be healthy...`);
       await sleep(2000);
     }
-    console.log("Admin is ready.");
+    console.log(`Admin is ready. ${adminUrl}`);
     for (const uri of deployments) {
       const res = await fetch(`${adminUrl}/deployments`, {
         method: "POST",
@@ -189,32 +190,53 @@ export class Test {
     this.status = TestStatus.RUNNING;
 
     if (this.conf.bootstrap) {
-      this.containers = await setupContainers();
+      this.containers = createCluster(CLUSTER);
+      await this.containers.start();
       console.log(this.containers);
     }
-    const ingressUrl = this.containers?.ingressUrl ?? this.conf.ingress;
-    const adminUrl = this.containers?.adminUrl ?? this.conf.register?.adminUrl;
-    const deployments =
-      this.containers?.services ?? this.conf.register?.deployments;
-
-    let ingress = restate.connect({ url: ingressUrl });
-
+    let ingressUrl;
+    if (this.containers) {
+      ingressUrl = [
+        this.containers.hostContainerUrl("n1", 8080),
+        this.containers.hostContainerUrl("n2", 8080),
+        this.containers.hostContainerUrl("n3", 8080),
+      ];
+    } else {
+      ingressUrl = [this.conf.ingress];
+    }
+    const adminUrl =
+      this.containers?.hostContainerUrl("n1", 9070) ??
+      this.conf.register?.adminUrl;
+    let deployments: string[] | undefined = undefined;
+    if (this.conf.register) {
+      deployments = this.conf.register.deployments;
+    } else if (this.containers) {
+      deployments = [
+        `http://interpreter_zero:9000`,
+        `http://interpreter_one:9001`,
+        `http://interpreter_two:9002`,
+        `http://services:9003`,
+      ];
+    }
+    const ingress = ingressUrl.map((url) => restate.connect({ url }));
     if (deployments) {
       await this.registerEndpoints(adminUrl, deployments);
     }
-    await this.ingressReady(ingressUrl);
+    for (const url of ingressUrl) {
+      await this.ingressReady(url);
+    }
 
     console.log("Generating ...");
 
     const killRestate = async () => {
-      const container = this.containers?.containers.restateContainer;
-      if (!container) {
+      if (!this.containers) {
         return;
       }
       const interval = this.conf.crashInterval;
       if (!interval) {
         return;
       }
+
       for (;;) {
         await sleep(interval);
         if (
@@ -223,42 +245,50 @@ export class Test {
         ) {
           break;
         }
-        console.log("Killing restate");
-        await container.restart({ timeout: 1 });
-        const newIngressUrl = `http://${container.getHost()}:${container.getMappedPort(
-          8080,
-        )}`;
-        const newAdminUrl = `http://${container.getHost()}:${container.getMappedPort(
-          9070,
-        )}`;
-        ingress = restate.connect({ url: newIngressUrl });
-        console.log(
-          `Restate is back:\ningress: ${newIngressUrl}\nadmin:  ${newAdminUrl}`,
-        );
+        let container;
+        const victim = Math.floor(Math.random() * 3) % 2;
+        const victimName = `n${victim + 2}`;
+        container = this.containers.container(victimName);
+        console.log("Killing restate: " + victimName);
+        await container.restart();
+        console.log(`Restate is back: ${victimName}`);
+        // update ingress
+        for (let i = 0; i < ingress.length; i++) {
+          ingress[i] = restate.connect({
+            url: this.containers.hostContainerUrl(`n${i + 1}`, 8080),
+          });
+        }
       }
     };
 
     killRestate().catch(console.error);
 
     let idempotencyKey = 1;
-    for (const b of batch(this.generate(), 32)) {
+    for (const b of batch(this.generate(), 256)) {
       const promises = b.map(({ id, program }) => {
         idempotencyKey += 1;
         const key = `${idempotencyKey}`;
-        return retry(() => {
-          const client = ingress.objectSendClient(InterpreterL0, `${id}`);
-          return client.interpret(
-            program,
-            restate.SendOpts.from({
-              idempotencyKey: key,
-            }),
-          );
+        return retry({
+          op: () => {
+            const server = Math.floor(Math.random() * ingress.length);
+            const ing = ingress[server];
+            const client = ing.objectSendClient(InterpreterL0, `${id}`);
+            return client.interpret(
+              program,
+              restate.SendOpts.from({
+                idempotencyKey: key,
+              }),
+            );
+          },
+          timeout: 100,
+          tag: `send ${key}`,
         });
       });
 
       b.forEach(({ id, program }) => this.stateTracker.update(0, id, program));
       try {
         await Promise.all(promises);
+        console.log(`Sent ${b.length} programs`);
       } catch (e) {
         console.error(e);
         throw e;
@@ -270,7 +300,7 @@ export class Test {
 
     for (const layerId of [0, 1, 2]) {
       try {
-        while (!(await this.verifyLayer(ingress, layerId))) {
+        while (!(await this.verifyLayer(ingress[0], layerId))) {
           await sleep(10 * 1000);
         }
       } catch (e) {
@@ -287,9 +317,11 @@ export class Test {
   }
 
   private async cleanup() {
-    if (this.containers) {
+    const c = this.containers;
+    if (c) {
+      this.containers = undefined;
       console.log("Cleaning up containers");
-      await tearDown(this.containers);
+      await c.stop();
     }
   }
 
@@ -304,10 +336,11 @@ export class Test {
 
     for (const layerChunk of batch(iterate(layer), 256)) {
       const futures = layerChunk.map(async ({ expected, id }) => {
-        const actual = await retry(
-          async () =>
+        const actual = await retry({
+          op: async () =>
             await ingress.objectClient(interpreterLn, `${id}`).counter(),
-        );
+          tag: "counter",
+        });
         return { expected, actual, id };
       });
       await Promise.all(futures);
