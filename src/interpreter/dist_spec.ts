@@ -10,10 +10,11 @@
 import { ClusterSpec, ContainerSpec } from "./infra";
 
 const RESTATE_IMAGE =
-  process.env.RESTATE_IMAGE ?? "ghcr.io/restatedev/restate:main";
+  process.env.RESTATE_CONTAINER_IMAGE ?? "ghcr.io/restatedev/restate:main";
 
 const SDK_IMAGE =
-  process.env.SDK_IMAGE ?? "localhost/restatedev/test-services:latest";
+  process.env.SERVICES_CONTAINER_IMAGE ??
+  "localhost/restatedev/test-services:latest";
 
 export const RESTATE_LEADER: ContainerSpec = {
   image: RESTATE_IMAGE,
