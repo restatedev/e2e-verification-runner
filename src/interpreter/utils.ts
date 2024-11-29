@@ -33,14 +33,24 @@ export const sleep = (duration: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, duration));
 
 export const timeout = <T>(duration: number): Promise<T> =>
-  new Promise((_resolve, rejected) => setTimeout(rejected, duration));
+  new Promise((_resolve, rejected) =>
+    setTimeout(() => rejected("timeout"), duration),
+  );
 
-export const retry = async <T>(op: () => Promise<T>): Promise<T> => {
+export type RetryOptions<T> = {
+  timeout?: number;
+  tag: string;
+  op: () => Promise<T>;
+};
+
+export const retry = async <T>(opts: RetryOptions<T>): Promise<T> => {
   let error;
+  const ts = opts.timeout ?? 10_000;
   for (let i = 0; i < 60; i++) {
     try {
-      return await Promise.race([op(), timeout<T>(10_000)]);
+      return await Promise.race([opts.op(), timeout<T>(ts)]);
     } catch (e) {
+      console.log("retrying", opts.tag, e);
       error = e;
       await sleep(10_000);
     }
