@@ -12,6 +12,9 @@ import { ClusterSpec, ContainerSpec } from "./infra";
 const RESTATE_IMAGE =
   process.env.RESTATE_IMAGE ?? "ghcr.io/restatedev/restate:main";
 
+const SDK_IMAGE =
+  process.env.SDK_IMAGE ?? "localhost/restatedev/test-services:latest";
+
 export const RESTATE_LEADER: ContainerSpec = {
   image: RESTATE_IMAGE,
   name: "n1",
@@ -65,7 +68,7 @@ export const INTERPRETER = (n: number): ContainerSpec => {
   }
   const name = `interpreter_${english}`;
   return {
-    image: "localhost/restatedev/test-services:latest",
+    image: SDK_IMAGE,
     name,
     ports: [9000 + n],
     pull: "never",
@@ -79,7 +82,7 @@ export const INTERPRETER = (n: number): ContainerSpec => {
 };
 
 export const SERVICES: ContainerSpec = {
-  image: "localhost/restatedev/test-services:latest",
+  image: SDK_IMAGE,
   name: "services",
   ports: [9003],
   pull: "never",

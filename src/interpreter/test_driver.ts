@@ -196,16 +196,19 @@ export class Test {
       this.containers = createCluster(CLUSTER);
       await this.containers.start();
       console.log(this.containers);
+
+      console.log("Mapped ports of the restate leader");
+      console.log(this.containers.container("n1").ports());
     }
     let ingressUrls;
     if (this.containers) {
       ingressUrls = [
-        this.containers.hostContainerUrl("n1", 8080),
-        this.containers.hostContainerUrl("n2", 8080),
-        this.containers.hostContainerUrl("n3", 8080),
+        new URL(this.containers.hostContainerUrl("n1", 8080)),
+        new URL(this.containers.hostContainerUrl("n2", 8080)),
+        new URL(this.containers.hostContainerUrl("n3", 8080)),
       ];
     } else {
-      ingressUrls = [this.conf.ingress];
+      ingressUrls = [new URL(this.conf.ingress)];
     }
     const adminUrl =
       this.containers?.hostContainerUrl("n1", 9070) ??
@@ -221,12 +224,11 @@ export class Test {
         `http://services:9003`,
       ];
     }
-    const ingress = ingressUrls.map((url) => restate.connect({ url }));
     if (deployments) {
       await this.registerEndpoints(adminUrl, deployments);
     }
     for (const url of ingressUrls) {
-      await this.ingressReady(url);
+      await this.ingressReady(url.toString());
     }
 
     console.log("Generating ...");
@@ -255,11 +257,12 @@ export class Test {
         console.log("Killing restate: " + victimName);
         await container.restart();
         console.log(`Restate is back: ${victimName}`);
+        //
         // update ingress
-        for (let i = 0; i < ingress.length; i++) {
+        //
+        for (let i = 0; i < ingressUrls.length; i++) {
           const url = this.containers.hostContainerUrl(`n${i + 1}`, 8080);
-          ingressUrls[i] = url;
-          ingress[i] = restate.connect({ url });
+          ingressUrls[i] = new URL(url);
         }
       }
     };
@@ -273,7 +276,7 @@ export class Test {
         const key = `${idempotencyKey}`;
         return retry({
           op: () => {
-            const server = Math.floor(Math.random() * ingress.length);
+            const server = Math.floor(Math.random() * ingressUrls.length);
             const url = ingressUrls[server];
             return sendInterpreter({
               ingressUrl: url,
@@ -281,15 +284,6 @@ export class Test {
               idempotencyKey: key,
               program,
             });
-            /*const ing = ingress[server];
-            const client = ing.objectSendClient(InterpreterL0, `${id}`);
-            return client.interpret(
-              program,
-              restate.SendOpts.from({
-                idempotencyKey: key,
-              }),
-            );
-            */
           },
           timeout: 100,
           tag: `send ${key}`,
@@ -309,9 +303,10 @@ export class Test {
     this.status = TestStatus.VALIDATING;
     console.log("Done generating");
 
+    const ingress = restate.connect({ url: ingressUrls[0].toString() });
     for (const layerId of [0, 1, 2]) {
       try {
-        while (!(await this.verifyLayer(ingress[0], layerId))) {
+        while (!(await this.verifyLayer(ingress, layerId))) {
           await sleep(10 * 1000);
         }
       } catch (e) {

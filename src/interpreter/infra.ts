@@ -31,6 +31,7 @@ export type ContainerSpec = {
 export type Container = {
   name: string;
   port(port: number): number;
+  ports(): Record<number, number>;
   url(port: number): string;
   host(): string;
   stop(): Promise<void>;
@@ -68,6 +69,20 @@ class ConfiguredContainer implements Container {
       throw new Error("Container not started");
     }
     return this.started.getMappedPort(port);
+  }
+
+  ports(): Record<number, number> {
+    if (this.started === undefined) {
+      throw new Error("Container not started");
+    }
+    const started = this.started;
+    return this.spec.ports.reduce(
+      (acc, port) => {
+        acc[port] = started.getMappedPort(port);
+        return acc;
+      },
+      {} as Record<number, number>,
+    );
   }
 
   url(port: number): string {

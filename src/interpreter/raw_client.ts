@@ -1,4 +1,4 @@
-import http from "http";
+import http from "node:http";
 import type { Program } from "./commands";
 
 const agent = new http.Agent({
@@ -6,18 +6,17 @@ const agent = new http.Agent({
 });
 
 export function sendInterpreter(opts: {
-  ingressUrl: string;
+  ingressUrl: URL;
   idempotencyKey: string;
   interpreterId: string;
   program: Program;
 }): Promise<void> {
   const { ingressUrl, idempotencyKey, interpreterId, program } = opts;
 
-  const u = new URL(ingressUrl);
   const options = {
     method: "POST",
-    hostname: u.hostname,
-    port: u.port,
+    hostname: ingressUrl.hostname,
+    port: ingressUrl.port,
     path: `/ObjectInterpreterL0/${interpreterId}/interpret/send`,
     agent,
     headers: {
@@ -26,6 +25,7 @@ export function sendInterpreter(opts: {
       Accept: "application/json",
     },
   };
+
   const { promise, resolve, reject } = Promise.withResolvers<void>();
 
   const req = http.request(options, function (res) {
