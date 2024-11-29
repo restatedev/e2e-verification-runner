@@ -99,7 +99,7 @@ export const CLUSTER: ClusterSpec = (() => {
 
   containers.push(RESTATE_LEADER);
 
-  for (let i = 0; i < 2 ; i++) {
+  for (let i = 0; i < 2; i++) {
     containers.push(RESTATE_FOLLOWER(i));
   }
 

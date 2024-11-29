@@ -156,7 +156,9 @@ export class Test {
       await sleep(2000);
     }
     console.log(`Admin is ready. ${adminUrl}`);
-    console.log(`🌍 RESTATE_ADMIN_URL=${adminUrl} ./target/debug/restate inv ls`);
+    console.log(
+      `🌍 RESTATE_ADMIN_URL=${adminUrl} ./target/debug/restate inv ls`,
+    );
     for (const uri of deployments) {
       const res = await fetch(`${adminUrl}/deployments`, {
         method: "POST",
@@ -200,8 +202,9 @@ export class Test {
       console.log("Mapped ports of the restate leader");
       console.log(this.containers.container("n1").ports());
 
-      console.log(`🌍 RESTATE_CLUSTER_CONTROLLER_ADDRESS=http://localhost:${this.containers.container("n1").port(5122)} ./target/debug/restatectl status`);
-
+      console.log(
+        `🌍 RESTATE_CLUSTER_CONTROLLER_ADDRESS=http://localhost:${this.containers.container("n1").port(5122)} ./target/debug/restatectl status`,
+      );
     }
     let ingressUrls;
     if (this.containers) {
