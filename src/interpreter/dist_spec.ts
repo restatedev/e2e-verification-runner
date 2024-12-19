@@ -19,7 +19,7 @@ const SDK_IMAGE =
 export const RESTATE_LEADER: ContainerSpec = {
   image: RESTATE_IMAGE,
   name: "n1",
-  ports: [8080, 9070, 5122, 5123],
+  ports: [8080, 9070, 5122],
   pull: "always",
   env: {
     RESTATE_LOG_FILTER: "restate=warn",
@@ -46,7 +46,7 @@ export const RESTATE_FOLLOWER = (n: number): ContainerSpec => {
       RESTATE_CLUSTER_NAME: "foobar",
       RESTATE_BIFROST__DEFAULT_PROVIDER: "replicated",
       RESTATE_ALLOW_BOOTSTRAP: "true",
-      RESTATE_METADATA_STORE_CLIENT__ADDRESS: "http://n1:5123",
+      RESTATE_METADATA_STORE_CLIENT__ADDRESS: "http://n1:5122",
       RESTATE_ADVERTISED_ADDRESS: `http://${name}:5122`,
     },
   };
