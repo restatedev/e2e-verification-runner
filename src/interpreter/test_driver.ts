@@ -121,7 +121,7 @@ export class Test {
   }
 
   async ingressReady(ingressUrl: string) {
-    for (;;) {
+    for (; ;) {
       try {
         const rc = await fetch(`${ingressUrl}/restate/health`);
         if (rc.ok) {
@@ -143,7 +143,7 @@ export class Test {
     if (!deployments) {
       throw new Error("Missing register.deployments (array of uri string)");
     }
-    for (;;) {
+    for (; ;) {
       try {
         const rc = await fetch(`${adminUrl}/health`);
         if (rc.ok) {
@@ -248,7 +248,7 @@ export class Test {
         return;
       }
 
-      for (;;) {
+      for (; ;) {
         await sleep(interval);
         if (
           this.status == TestStatus.FAILED ||
