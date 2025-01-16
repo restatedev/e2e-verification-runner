@@ -30,6 +30,7 @@ export const RESTATE_LEADER: ContainerSpec = {
     RESTATE_BIFROST__REPLICATED_LOGLET__DEFAULT_REPLICATION_PROPERTY: "2",
     RESTATE_ALLOW_BOOTSTRAP: "true",
     RESTATE_ADVERTISED_ADDRESS: "http://n1:5122",
+    DO_NOT_TRACK: "true",
   },
 };
 
@@ -50,6 +51,7 @@ export const RESTATE_FOLLOWER = (n: number): ContainerSpec => {
       RESTATE_ALLOW_BOOTSTRAP: "false",
       RESTATE_METADATA_STORE_CLIENT__ADDRESS: "http://n1:5122",
       RESTATE_ADVERTISED_ADDRESS: `http://${name}:5122`,
+      DO_NOT_TRACK: "true",
     },
   };
 };
