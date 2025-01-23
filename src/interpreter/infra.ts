@@ -116,7 +116,7 @@ class ConfiguredCluster implements Cluster {
   private containers: Map<string, ConfiguredContainer> | undefined;
   private network: StartedNetwork | undefined;
 
-  constructor(private readonly spec: ClusterSpec) { }
+  constructor(private readonly spec: ClusterSpec) {}
 
   hostContainerUrl(name: string, port: number): string {
     if (this.containers === undefined) {

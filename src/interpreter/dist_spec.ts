@@ -28,6 +28,7 @@ export const RESTATE_LEADER: ContainerSpec = {
     RESTATE_CLUSTER_NAME: "foobar",
     RESTATE_BIFROST__DEFAULT_PROVIDER: "replicated",
     RESTATE_BIFROST__REPLICATED_LOGLET__DEFAULT_REPLICATION_PROPERTY: "2",
+    RESTATE_METADATA_STORE__TYPE: "embedded",
     RESTATE_ALLOW_BOOTSTRAP: "true",
     RESTATE_ADVERTISED_ADDRESS: "http://n1:5122",
     DO_NOT_TRACK: "true",
@@ -44,12 +45,12 @@ export const RESTATE_FOLLOWER = (n: number): ContainerSpec => {
     env: {
       RESTATE_LOG_FILTER: "restate=warn",
       RESTATE_LOG_FORMAT: "json",
-      RESTATE_ROLES: "[worker,admin,log-server]",
+      RESTATE_ROLES: "[worker,admin,log-server, metadata-store]",
       RESTATE_CLUSTER_NAME: "foobar",
       RESTATE_BIFROST__DEFAULT_PROVIDER: "replicated",
       RESTATE_BIFROST__REPLICATED_LOGLET__DEFAULT_REPLICATION_PROPERTY: "2",
-      RESTATE_ALLOW_BOOTSTRAP: "false",
       RESTATE_METADATA_STORE_CLIENT__TYPE: "embedded",
+      RESTATE_ALLOW_BOOTSTRAP: "false",
       RESTATE_METADATA_STORE_CLIENT__ADDRESSES: "[http://n1:5122]",
       RESTATE_ADVERTISED_ADDRESS: `http://${name}:5122`,
       DO_NOT_TRACK: "true",
@@ -105,9 +106,8 @@ export const CLUSTER: ClusterSpec = (() => {
 
   containers.push(RESTATE_LEADER);
 
-  for (let i = 0; i < 2; i++) {
-    containers.push(RESTATE_FOLLOWER(i));
-  }
+  containers.push(RESTATE_FOLLOWER(0));
+  containers.push(RESTATE_FOLLOWER(1));
 
   containers.push(INTERPRETER(0));
   containers.push(INTERPRETER(1));
