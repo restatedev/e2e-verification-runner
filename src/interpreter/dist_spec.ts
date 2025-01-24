@@ -9,110 +9,20 @@
 
 import { ClusterSpec, ContainerSpec } from "./infra";
 
-const RESTATE_IMAGE =
-  process.env.RESTATE_CONTAINER_IMAGE ?? "ghcr.io/restatedev/restate:main";
-
-const SDK_IMAGE =
-  process.env.SERVICES_CONTAINER_IMAGE ??
-  "localhost/restatedev/test-services:latest";
-
-export const RESTATE_LEADER: ContainerSpec = {
-  image: RESTATE_IMAGE,
-  name: "n1",
-  ports: [8080, 9070, 5122],
-  pull: "always",
-  env: {
-    RESTATE_LOG_FILTER: "restate=warn",
-    RESTATE_LOG_FORMAT: "json",
-    RESTATE_ROLES: "[worker,log-server,admin,metadata-store]",
-    RESTATE_CLUSTER_NAME: "foobar",
-    RESTATE_BIFROST__DEFAULT_PROVIDER: "replicated",
-    RESTATE_BIFROST__REPLICATED_LOGLET__DEFAULT_REPLICATION_PROPERTY: "2",
-    RESTATE_METADATA_STORE__TYPE: "embedded",
-    RESTATE_ALLOW_BOOTSTRAP: "true",
-    RESTATE_ADVERTISED_ADDRESS: "http://n1:5122",
-    DO_NOT_TRACK: "true",
-  },
-};
-
-export const RESTATE_FOLLOWER = (n: number): ContainerSpec => {
-  const name = `n${n + 2}`; // followers start at 2, leader is 1.
-  return {
-    image: RESTATE_IMAGE,
-    name,
-    ports: [8080],
-    pull: "always",
-    env: {
-      RESTATE_LOG_FILTER: "restate=warn",
-      RESTATE_LOG_FORMAT: "json",
-      RESTATE_ROLES: "[worker,admin,log-server, metadata-store]",
-      RESTATE_CLUSTER_NAME: "foobar",
-      RESTATE_BIFROST__DEFAULT_PROVIDER: "replicated",
-      RESTATE_BIFROST__REPLICATED_LOGLET__DEFAULT_REPLICATION_PROPERTY: "2",
-      RESTATE_METADATA_STORE_CLIENT__TYPE: "embedded",
-      RESTATE_ALLOW_BOOTSTRAP: "false",
-      RESTATE_METADATA_STORE_CLIENT__ADDRESSES: "[http://n1:5122]",
-      RESTATE_ADVERTISED_ADDRESS: `http://${name}:5122`,
-      DO_NOT_TRACK: "true",
-    },
-  };
-};
-
-export const INTERPRETER = (n: number): ContainerSpec => {
-  let english: string;
-  switch (n) {
-    case 0:
-      english = "zero";
-      break;
-    case 1:
-      english = "one";
-      break;
-    case 2:
-      english = "two";
-      break;
-    default:
-      throw new Error("Invalid interpreter number");
-  }
-  const name = `interpreter_${english}`;
-  return {
-    image: SDK_IMAGE,
-    name,
-    ports: [9000 + n],
-    pull: "never",
-    env: {
-      PORT: `${9000 + n}`,
-      RESTATE_LOGGING: "ERROR",
-      NODE_ENV: "production",
-      SERVICES: `ObjectInterpreterL${n}`,
-    },
-  };
-};
-
-export const SERVICES: ContainerSpec = {
-  image: SDK_IMAGE,
-  name: "services",
-  ports: [9003],
-  pull: "never",
-  env: {
-    PORT: "9003",
-    RESTATE_LOGGING: "ERROR",
-    NODE_ENV: "production",
-    SERVICES: "ServiceInterpreterHelper",
-  },
-};
+const RESTATE_ENV_JSON = process.env.UNIVERSE_ENV_JSON;
 
 export const CLUSTER: ClusterSpec = (() => {
-  const containers = [];
+  if (RESTATE_ENV_JSON === undefined) {
+    throw new Error("UNIVERSE_ENV_JSON is not set");
+  }
 
-  containers.push(RESTATE_LEADER);
+  const universe = JSON.parse(RESTATE_ENV_JSON);
+  const containers = Object.entries(universe).map(([key, value]) => {
+    (value as any)['name'] = key;
+    return value as ContainerSpec;
+  });
 
-  containers.push(RESTATE_FOLLOWER(0));
-  containers.push(RESTATE_FOLLOWER(1));
-
-  containers.push(INTERPRETER(0));
-  containers.push(INTERPRETER(1));
-  containers.push(INTERPRETER(2));
-  containers.push(SERVICES);
+  console.log(containers);
 
   return { containers };
 })();
