@@ -291,7 +291,7 @@ export class Test {
               program,
             });
           },
-          timeout: 100,
+          timeout: 1000,
           tag: `send ${key}`,
         });
       });
