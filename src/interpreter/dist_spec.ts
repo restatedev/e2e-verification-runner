@@ -18,7 +18,7 @@ export const CLUSTER: ClusterSpec = (() => {
 
   const universe = JSON.parse(RESTATE_ENV_JSON);
   const containers = Object.entries(universe).map(([key, value]) => {
-    (value as any)['name'] = key;
+    (value as any)["name"] = key;
     return value as ContainerSpec;
   });
 
