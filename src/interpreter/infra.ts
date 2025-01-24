@@ -154,6 +154,7 @@ class ConfiguredCluster implements Cluster {
         .withExposedPorts(...spec.ports)
         .withNetwork(network)
         .withNetworkAliases(spec.name)
+        .withName(spec.name)
         .withPullPolicy(
           spec.pull === "always" ? PullPolicy.alwaysPull() : neverPoll,
         )
