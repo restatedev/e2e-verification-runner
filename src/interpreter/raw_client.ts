@@ -5,6 +5,38 @@ const agent = new http.Agent({
   keepAlive: true,
 });
 
+
+export function getCounts(opts: {
+  adminUrl: string;
+  layer: number,
+}): Promise<Map<string, number>> {
+  const { adminUrl, layer } = opts;
+
+  const query = `select service_key, value_utf8 from state where key = 'counter' and service_name = 'ObjectInterpreterL${layer}'`;
+
+  
+  return fetch(`${adminUrl}/query`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      query 
+    }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      const counts = new Map<string, number>();
+      for (const row of data.rows) {
+        counts.set(row.service_key, JSON.parse(row.value_utf8));
+      }
+      return counts;
+    });
+}
+
+ 
+
 export function sendInterpreter(opts: {
   ingressUrl: URL;
   idempotencyKey: string;

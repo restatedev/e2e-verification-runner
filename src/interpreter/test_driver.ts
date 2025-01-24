@@ -17,7 +17,8 @@ import { ProgramGenerator } from "./test_generator";
 import * as restate from "@restatedev/restate-sdk-clients";
 import { batch, iterate, retry, sleep } from "./utils";
 import { send } from "process";
-import { sendInterpreter } from "./raw_client";
+import { getCounts, sendInterpreter } from "./raw_client";
+import { assert } from "console";
 
 const MAX_LAYERS = 3;
 
@@ -308,11 +309,13 @@ export class Test {
 
     this.status = TestStatus.VALIDATING;
     console.log("Done generating");
-
-    const ingress = restate.connect({ url: ingressUrls[0].toString() });
+    if (adminUrl === undefined) {
+          throw new Error("Missing adminUrl");
+     }
     for (const layerId of [0, 1, 2]) {
       try {
-        while (!(await this.verifyLayer(ingress, layerId))) {
+        console.log(`Validating layer ${layerId} contacting ${adminUrl}`);
+        while (!(await this.verifyLayer(adminUrl, layerId))) {
           await sleep(10 * 1000);
         }
       } catch (e) {
@@ -338,32 +341,30 @@ export class Test {
   }
 
   async verifyLayer(
-    ingress: restate.Ingress,
+    adminUrl: string,
     layerId: number,
   ): Promise<boolean> {
     console.log(`Trying to verify layer ${layerId}`);
 
     const layer = this.stateTracker.getLayer(layerId);
-    const interpreterLn = interpreterObjectForLayer(layerId);
 
-    for (const layerChunk of batch(iterate(layer), 256)) {
-      const futures = layerChunk.map(async ({ expected, id }) => {
-        const actual = await retry({
-          op: async () =>
-            await ingress.objectClient(interpreterLn, `${id}`).counter(),
-          tag: "counter",
-        });
-        return { expected, actual, id };
-      });
-      await Promise.all(futures);
-      for await (const { expected, actual, id } of futures) {
-        if (expected !== actual) {
+    const counts = await retry({
+      op: () => getCounts({ adminUrl: adminUrl.toString(), layer: layerId }),
+      tag: "getCounts",
+      timeout: 10_000,
+    }); 
+
+    for (const {id, expected} of iterate(layer)) {
+      const actual = counts.get(`${id}`);
+      if (expected === 0 && actual === undefined) {
+        continue;
+      }
+      if (expected !== actual) {
           console.log(
             `Found a mismatch at layer ${layerId} interpreter ${id}. Expected ${expected} but got ${actual}. This is expected, this interpreter might still have some backlog to process, and eventually it will catchup with the desired value. Will retry in few seconds.`,
           );
           return false;
-        }
-      }
+       }
     }
     return true;
   }
