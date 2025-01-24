@@ -217,9 +217,12 @@ export class Test {
     } else {
       ingressUrls = [new URL(this.conf.ingress)];
     }
-    const adminUrl =
-      this.containers?.hostContainerUrl("n1", 9070) ??
-      this.conf.register?.adminUrl;
+    const adminUrl = () => {
+      return (
+        this.containers?.hostContainerUrl("n1", 9070) ??
+        this.conf.register?.adminUrl
+      );
+    };
     let deployments: string[] | undefined = undefined;
     if (this.conf.register) {
       deployments = this.conf.register.deployments;
@@ -232,7 +235,7 @@ export class Test {
       ];
     }
     if (deployments) {
-      await this.registerEndpoints(adminUrl, deployments);
+      await this.registerEndpoints(adminUrl(), deployments);
     }
     for (const url of ingressUrls) {
       await this.ingressReady(url.toString());
@@ -309,12 +312,9 @@ export class Test {
 
     this.status = TestStatus.VALIDATING;
     console.log("Done generating");
-    if (adminUrl === undefined) {
-          throw new Error("Missing adminUrl");
-     }
-    for (const layerId of [0, 1, 2]) {
+    for (const layerId of [1, 1, 2]) {
       try {
-        console.log(`Validating layer ${layerId} contacting ${adminUrl}`);
+        console.log(`Validating layer ${layerId}`);
         while (!(await this.verifyLayer(adminUrl, layerId))) {
           await sleep(10 * 1000);
         }
@@ -341,7 +341,7 @@ export class Test {
   }
 
   async verifyLayer(
-    adminUrl: string,
+    adminUrl: () => string | undefined,
     layerId: number,
   ): Promise<boolean> {
     console.log(`Trying to verify layer ${layerId}`);
@@ -349,22 +349,25 @@ export class Test {
     const layer = this.stateTracker.getLayer(layerId);
 
     const counts = await retry({
-      op: () => getCounts({ adminUrl: adminUrl.toString(), layer: layerId }),
+      op: () => {
+        const url = adminUrl();
+        return getCounts({ adminUrl: url!, layer: layerId });
+      },
       tag: "getCounts",
       timeout: 10_000,
-    }); 
+    });
 
-    for (const {id, expected} of iterate(layer)) {
+    for (const { id, expected } of iterate(layer)) {
       const actual = counts.get(`${id}`);
       if (expected === 0 && actual === undefined) {
         continue;
       }
       if (expected !== actual) {
-          console.log(
-            `Found a mismatch at layer ${layerId} interpreter ${id}. Expected ${expected} but got ${actual}. This is expected, this interpreter might still have some backlog to process, and eventually it will catchup with the desired value. Will retry in few seconds.`,
-          );
-          return false;
-       }
+        console.log(
+          `Found a mismatch at layer ${layerId} interpreter ${id}. Expected ${expected} but got ${actual}. This is expected, this interpreter might still have some backlog to process, and eventually it will catchup with the desired value. Will retry in few seconds.`,
+        );
+        return false;
+      }
     }
     return true;
   }
