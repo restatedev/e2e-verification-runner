@@ -312,7 +312,7 @@ export class Test {
 
     this.status = TestStatus.VALIDATING;
     console.log("Done generating");
-    for (const layerId of [1, 1, 2]) {
+    for (const layerId of [0, 1, 2]) {
       try {
         console.log(`Validating layer ${layerId}`);
         while (!(await this.verifyLayer(adminUrl, layerId))) {
