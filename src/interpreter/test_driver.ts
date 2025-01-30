@@ -8,17 +8,13 @@
 // https://github.com/restatedev/e2e/blob/main/LICENSE
 
 import { Program, CommandType } from "./commands";
-import { interpreterObjectForLayer } from "./interpreter";
 import { Random } from "./random";
 import { Cluster, createCluster } from "./infra";
 import { CLUSTER } from "./dist_spec";
 import { ProgramGenerator } from "./test_generator";
 
-import * as restate from "@restatedev/restate-sdk-clients";
-import { batch, iterate, retry, sleep } from "./utils";
-import { send } from "process";
+import { batch, retry, sleep } from "./utils";
 import { getCounts, sendInterpreter } from "./raw_client";
-import { assert } from "console";
 
 const MAX_LAYERS = 3;
 
@@ -85,6 +81,10 @@ class StateTracker {
 
   getLayer(layer: number): number[] {
     return this.states[layer];
+  }
+
+  getStates(): number[][] {
+    return this.states;
   }
 }
 
@@ -206,6 +206,8 @@ export class Test {
       console.log(
         `🌍 RESTATE_CLUSTER_CONTROLLER_ADDRESS=http://localhost:${this.containers.container("n1").port(5122)} ./target/debug/restatectl status`,
       );
+
+      await sleep(10 * 1000);
     }
     let ingressUrls;
     if (this.containers) {
@@ -312,23 +314,82 @@ export class Test {
 
     this.status = TestStatus.VALIDATING;
     console.log("Done generating");
-    for (const layerId of [0, 1, 2]) {
-      try {
-        console.log(`Validating layer ${layerId}`);
-        while (!(await this.verifyLayer(adminUrl, layerId))) {
-          await sleep(10 * 1000);
-        }
-      } catch (e) {
-        console.error(e);
-        console.error(`Failed to validate layer ${layerId}, retrying...`);
-        await sleep(1000);
-      }
-      console.log(`Done validating layer ${layerId}`);
-    }
 
-    console.log("Done.");
-    this.status = TestStatus.FINISHED;
-    return TestStatus.FINISHED;
+    const expected = this.stateTracker.getStates();
+    const numInterpreters = this.conf.keys;
+    const expectedTotal = expected.reduce((acc, layer) => {
+      return acc + layer.reduce((acc, v) => acc + v, 0);
+    }, 0);
+
+    let lastMillisecond = new Date().getMilliseconds();
+    let lastCountDiff = numInterpreters;
+    let lastTotalDiff = expectedTotal;
+
+    while (true) {
+      const { counters } = await retry({
+        op: () => {
+          const url = adminUrl(); // always use the latest url
+          return getCounts({ adminUrl: url!, numInterpreters });
+        },
+        tag: "getCounts",
+        timeout: 10_000,
+      });
+
+      let countDiff = 0;
+      let totalDiff = 0;
+      let maxDiff = 0;
+
+      for (let i = 0; i < MAX_LAYERS; i++) {
+        for (let j = 0; j < this.conf.keys; j++) {
+          const d = expected[i][j] - counters[i][j];
+          if (d !== 0) {
+            //console.log(`\tL${i}_${j}\t${d}`);
+            countDiff += 1;
+            totalDiff += Math.abs(d);
+          }
+          if (d > maxDiff) {
+            maxDiff = d;
+          }
+        }
+      }
+
+      const nowDate = new Date();
+      const now = new Date().toISOString();
+      const nowMillis = nowDate.getMilliseconds();
+
+      if (countDiff === 0) {
+        console.log(`Done.`);
+        this.status = TestStatus.FINISHED;
+        return TestStatus.FINISHED;
+      }
+
+      const percentDone =
+        ((expectedTotal - 1.0 * totalDiff) / expectedTotal) * 100;
+
+      console.log(
+        `\x1b[31m ${now}\tVerification:
+          =================================================================================
+      
+          Keys      differ:     ${countDiff}   
+          Total     difference: ${totalDiff}
+          Settled   change:     ${countDiff - lastCountDiff}
+          Total     change      ${totalDiff - lastTotalDiff}
+          Max       difference: ${maxDiff}
+
+          Percent done: ${percentDone.toFixed(2)}%
+
+
+          =================================================================================
+
+          \x1b[0m`,
+      );
+
+      lastMillisecond = nowMillis;
+      lastCountDiff = countDiff;
+      lastTotalDiff = totalDiff;
+
+      await sleep(10 * 1000);
+    }
   }
 
   private async cleanup() {
@@ -339,38 +400,4 @@ export class Test {
       await c.stop();
     }
   }
-
-  async verifyLayer(
-    adminUrl: () => string | undefined,
-    layerId: number,
-  ): Promise<boolean> {
-    console.log(`Trying to verify layer ${layerId}`);
-
-    const layer = this.stateTracker.getLayer(layerId);
-
-    const counts = await retry({
-      op: () => {
-        const url = adminUrl();
-        return getCounts({ adminUrl: url!, layer: layerId });
-      },
-      tag: "getCounts",
-      timeout: 10_000,
-    });
-
-    for (const { id, expected } of iterate(layer)) {
-      const actual = counts.get(`${id}`);
-      if (expected === 0 && actual === undefined) {
-        continue;
-      }
-      if (expected !== actual) {
-        console.log(
-          `Found a mismatch at layer ${layerId} interpreter ${id}. Expected ${expected} but got ${actual}. This is expected, this interpreter might still have some backlog to process, and eventually it will catchup with the desired value. Will retry in few seconds.`,
-        );
-        return false;
-      }
-    }
-    return true;
-  }
 }
-
-const InterpreterL0 = interpreterObjectForLayer(0);
