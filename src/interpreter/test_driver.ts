@@ -350,7 +350,7 @@ const verify = async ({
   expectedTotal: number;
   expected: number[][];
 }) => {
-  const verificationPhaseStartTime = new Date().getMilliseconds();
+  const verificationPhaseStartTime = new Date().getTime();
   let lastMillisecond = verificationPhaseStartTime;
   let lastCountDiff = numInterpreters;
   let lastTotalDiff = expectedTotal;
@@ -387,7 +387,7 @@ const verify = async ({
 
     const nowDate = new Date();
     const now = new Date().toISOString();
-    const nowMillis = nowDate.getMilliseconds();
+    const nowMillis = nowDate.getTime();
 
     if (countDiff === 0) {
       console.log(`Done.`);
@@ -396,6 +396,17 @@ const verify = async ({
 
     const percentDone =
       ((expectedTotal - 1.0 * totalDiff) / expectedTotal) * 100;
+
+    let remainingFormatted = "";
+    if (percentDone > 0) {
+      const needsMore = Math.ceil(
+        (nowMillis - verificationPhaseStartTime) * (100.0 / percentDone),
+      );
+      const remaining = needsMore - (nowMillis - verificationPhaseStartTime);
+      remainingFormatted = formatDuration(remaining);
+    } else {
+      remainingFormatted = "N/A";
+    }
 
     console.log(
       `\x1b[31m ${now}\tVerification:
@@ -408,6 +419,8 @@ const verify = async ({
           Max       difference: ${maxDiff}
 
           Percent done: ${percentDone.toFixed(2)}%
+          Time elapsed: ${formatDuration(nowMillis - verificationPhaseStartTime)}
+          Estimated time remaining: ${remainingFormatted}
 
           =================================================================================
 
@@ -419,3 +432,19 @@ const verify = async ({
     lastTotalDiff = totalDiff;
   }
 };
+
+function formatDuration(ms: number): string {
+  const seconds = Math.floor((ms / 1000) % 60);
+  const minutes = Math.floor((ms / (1000 * 60)) % 60);
+  const hours = Math.floor((ms / (1000 * 60 * 60)) % 24);
+  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+
+  const parts: string[] = [];
+
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
+
+  return parts.join(" ");
+}
