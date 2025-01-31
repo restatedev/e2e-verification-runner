@@ -321,75 +321,12 @@ export class Test {
       return acc + layer.reduce((acc, v) => acc + v, 0);
     }, 0);
 
-    let lastMillisecond = new Date().getMilliseconds();
-    let lastCountDiff = numInterpreters;
-    let lastTotalDiff = expectedTotal;
-
-    while (true) {
-      const { counters } = await retry({
-        op: () => {
-          const url = adminUrl(); // always use the latest url
-          return getCounts({ adminUrl: url!, numInterpreters });
-        },
-        tag: "getCounts",
-        timeout: 10_000,
-      });
-
-      let countDiff = 0;
-      let totalDiff = 0;
-      let maxDiff = 0;
-
-      for (let i = 0; i < MAX_LAYERS; i++) {
-        for (let j = 0; j < this.conf.keys; j++) {
-          const d = expected[i][j] - counters[i][j];
-          if (d !== 0) {
-            //console.log(`\tL${i}_${j}\t${d}`);
-            countDiff += 1;
-            totalDiff += Math.abs(d);
-          }
-          if (d > maxDiff) {
-            maxDiff = d;
-          }
-        }
-      }
-
-      const nowDate = new Date();
-      const now = new Date().toISOString();
-      const nowMillis = nowDate.getMilliseconds();
-
-      if (countDiff === 0) {
-        console.log(`Done.`);
-        this.status = TestStatus.FINISHED;
-        return TestStatus.FINISHED;
-      }
-
-      const percentDone =
-        ((expectedTotal - 1.0 * totalDiff) / expectedTotal) * 100;
-
-      console.log(
-        `\x1b[31m ${now}\tVerification:
-          =================================================================================
-      
-          Keys      differ:     ${countDiff}   
-          Total     difference: ${totalDiff}
-          Settled   change:     ${countDiff - lastCountDiff}
-          Total     change      ${totalDiff - lastTotalDiff}
-          Max       difference: ${maxDiff}
-
-          Percent done: ${percentDone.toFixed(2)}%
-
-
-          =================================================================================
-
-          \x1b[0m`,
-      );
-
-      lastMillisecond = nowMillis;
-      lastCountDiff = countDiff;
-      lastTotalDiff = totalDiff;
-
-      await sleep(10 * 1000);
-    }
+    return verify({
+      numInterpreters,
+      adminUrl,
+      expectedTotal,
+      expected,
+    });
   }
 
   private async cleanup() {
@@ -401,3 +338,84 @@ export class Test {
     }
   }
 }
+
+const verify = async ({
+  numInterpreters,
+  adminUrl,
+  expectedTotal,
+  expected,
+}: {
+  numInterpreters: number;
+  adminUrl: () => string | undefined;
+  expectedTotal: number;
+  expected: number[][];
+}) => {
+  const verificationPhaseStartTime = new Date().getMilliseconds();
+  let lastMillisecond = verificationPhaseStartTime;
+  let lastCountDiff = numInterpreters;
+  let lastTotalDiff = expectedTotal;
+
+  while (true) {
+    await sleep(10 * 1000);
+
+    const { counters } = await retry({
+      op: () => {
+        const url = adminUrl(); // always use the latest url
+        return getCounts({ adminUrl: url!, numInterpreters });
+      },
+      tag: "getCounts",
+      timeout: 10_000,
+    });
+
+    let countDiff = 0;
+    let totalDiff = 0;
+    let maxDiff = 0;
+
+    for (let i = 0; i < expected.length; i++) {
+      const n = expected[i].length;
+      for (let j = 0; j < n; j++) {
+        const d = expected[i][j] - counters[i][j];
+        if (d !== 0) {
+          countDiff += 1;
+          totalDiff += Math.abs(d);
+        }
+        if (d > maxDiff) {
+          maxDiff = d;
+        }
+      }
+    }
+
+    const nowDate = new Date();
+    const now = new Date().toISOString();
+    const nowMillis = nowDate.getMilliseconds();
+
+    if (countDiff === 0) {
+      console.log(`Done.`);
+      return TestStatus.FINISHED;
+    }
+
+    const percentDone =
+      ((expectedTotal - 1.0 * totalDiff) / expectedTotal) * 100;
+
+    console.log(
+      `\x1b[31m ${now}\tVerification:
+          =================================================================================
+      
+          Keys      differ:     ${countDiff}   
+          Total     difference: ${totalDiff}
+          Settled   change:     ${countDiff - lastCountDiff}
+          Total     change      ${totalDiff - lastTotalDiff}
+          Max       difference: ${maxDiff}
+
+          Percent done: ${percentDone.toFixed(2)}%
+
+          =================================================================================
+
+          \x1b[0m`,
+    );
+
+    lastMillisecond = nowMillis;
+    lastCountDiff = countDiff;
+    lastTotalDiff = totalDiff;
+  }
+};
