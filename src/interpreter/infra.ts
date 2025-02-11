@@ -26,6 +26,7 @@ export type ContainerSpec = {
   ports: number[];
   env?: Record<string, string>;
   pull: "always" | "never";
+  cmd?: string[];
 };
 
 export type Container = {
@@ -159,6 +160,10 @@ class ConfiguredCluster implements Cluster {
           spec.pull === "always" ? PullPolicy.alwaysPull() : neverPoll,
         )
         .withEnvironment(spec.env ?? {});
+
+      if (spec.cmd) {
+        container.withCommand(spec.cmd);
+      }
 
       const startedContainer = await container.start();
 
