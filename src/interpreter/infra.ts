@@ -15,6 +15,7 @@ import {
   StartedNetwork,
   StartedTestContainer,
 } from "testcontainers";
+import { getComposeClient } from "testcontainers/build/container-runtime/clients/compose/compose-client";
 
 export type ClusterSpec = {
   containers: ContainerSpec[];
@@ -27,6 +28,7 @@ export type ContainerSpec = {
   env?: Record<string, string>;
   pull: "always" | "never";
   cmd?: string[];
+  entryPoint?: string[];
 };
 
 export type Container = {
@@ -163,6 +165,9 @@ class ConfiguredCluster implements Cluster {
 
       if (spec.cmd) {
         container.withCommand(spec.cmd);
+      }
+      if (spec.entryPoint) {
+        container.withEntrypoint(spec.entryPoint);
       }
 
       const startedContainer = await container.start();
