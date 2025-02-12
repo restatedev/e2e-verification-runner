@@ -15,7 +15,6 @@ import {
   StartedNetwork,
   StartedTestContainer,
 } from "testcontainers";
-import { getComposeClient } from "testcontainers/build/container-runtime/clients/compose/compose-client";
 
 export type ClusterSpec = {
   containers: ContainerSpec[];
@@ -39,6 +38,7 @@ export type Container = {
   host(): string;
   stop(): Promise<void>;
   restart(): Promise<void>;
+  restartAndWipeData(): Promise<void>;
 };
 
 export type Cluster = {
@@ -54,14 +54,11 @@ export function createCluster(spec: ClusterSpec): Cluster {
 }
 
 class ConfiguredContainer implements Container {
-  private started: StartedTestContainer | undefined;
-
   constructor(
     private readonly spec: ContainerSpec,
-    private readonly container: StartedTestContainer,
-  ) {
-    this.started = container;
-  }
+    private readonly genericContainer: GenericContainer,
+    private started: StartedTestContainer | undefined,
+  ) {}
 
   get name() {
     return this.spec.name;
@@ -112,6 +109,14 @@ class ConfiguredContainer implements Container {
       throw new Error("Container not started");
     }
     await this.started.restart({ timeout: 1 });
+  }
+
+  async restartAndWipeData() {
+    if (this.started === undefined) {
+      throw new Error("Container not started");
+    }
+    await this.started.stop({ removeVolumes: true });
+    this.started = await this.genericContainer.start();
   }
 }
 
@@ -172,7 +177,7 @@ class ConfiguredCluster implements Cluster {
 
       const startedContainer = await container.start();
 
-      return new ConfiguredContainer(spec, startedContainer);
+      return new ConfiguredContainer(spec, container, startedContainer);
     });
 
     const containers = await Promise.all(containerPromises);

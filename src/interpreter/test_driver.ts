@@ -32,6 +32,7 @@ export interface TestConfiguration {
   readonly register?: TestConfigurationDeployments; // auto register the following endpoints
   readonly bootstrap?: boolean;
   readonly crashInterval?: number;
+  readonly crashHard?: boolean;
 }
 
 export enum TestStatus {
@@ -254,6 +255,8 @@ export class Test {
         return;
       }
 
+      const crashHard = this.conf.crashHard ?? false;
+
       for (;;) {
         await sleep(interval);
         if (
@@ -267,7 +270,11 @@ export class Test {
         const victimName = `n${victim + 1}`; // servers are named n1, n2, n3...
         container = this.containers.container(victimName);
         console.log("Killing restate: " + victimName);
-        await container.restart();
+        if (crashHard) {
+          await container.restartAndWipeData();
+        } else {
+          await container.restart();
+        }
         console.log(`Restate is back: ${victimName}`);
         //
         // update ingress
