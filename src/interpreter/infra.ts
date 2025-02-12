@@ -15,6 +15,7 @@ import {
   StartedNetwork,
   StartedTestContainer,
 } from "testcontainers";
+import { sleep } from "./utils";
 
 export type ClusterSpec = {
   containers: ContainerSpec[];
@@ -115,8 +116,10 @@ class ConfiguredContainer implements Container {
     if (this.started === undefined) {
       throw new Error("Container not started");
     }
-    await this.started.stop({ removeVolumes: true });
-    this.started = await this.genericContainer.start();
+
+    await this.started.exec(["sh", "-c", "kill -9 1"]);
+    await this.started.exec(["sh", "-c", "rm -rf /restate-data/*/db"]);
+    await this.started.restart({ timeout: 1 });
   }
 }
 
