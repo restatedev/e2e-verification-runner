@@ -6,11 +6,18 @@ COPY . .
 RUN npm install
 RUN npm run build
 
-FROM node:23 AS prod
+FROM node:23 as prod
 WORKDIR /usr/src/app
 
 # Install app dependencies
-COPY --from=build /usr/src/app/dist/app.js /usr/src/app/app.js
+COPY package*.json *.tgz ./
+RUN npm install --production
+
+COPY --from=build /usr/src/app/dist /usr/src/app/dist
+
+# Install Tini
+RUN apt-get update && apt-get -y install tini
 
 EXPOSE 8080
-CMD ["node", "/usr/src/app/app.js"]
+ENTRYPOINT ["tini", "--"]
+CMD ["node", "/usr/src/app/dist/app.js"]
