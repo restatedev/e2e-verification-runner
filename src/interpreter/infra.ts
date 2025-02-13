@@ -117,7 +117,15 @@ class ConfiguredContainer implements Container {
       throw new Error("Container not started");
     }
 
+    const now = new Date().getTime();
+
     await this.started.exec(["sh", "-c", "kill -9 1"]);
+    await this.started.exec(["sh", "-c", `mkdir -p /ohoh/${now}`]);
+    await this.started.exec([
+      "sh",
+      "-c",
+      `cp -r /restate-data/*/db /ohoh/${now}/db`,
+    ]);
     await this.started.exec(["sh", "-c", "rm -rf /restate-data/*/db"]);
     await this.started.restart({ timeout: 1 });
   }
