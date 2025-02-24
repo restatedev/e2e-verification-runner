@@ -1,4 +1,4 @@
-name: Verification tests
+name: Verification tests - Python
 
 on:
   workflow_dispatch: # To start from UI
