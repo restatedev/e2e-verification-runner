@@ -32,4 +32,6 @@ jobs:
         env:
           RESTATE_CONTAINER_IMAGE: 'ghcr.io/restatedev/restate:main'
           SERVICES_CONTAINER_IMAGE: 'ghcr.io/restatedev/test-services-go:main'
+          ENV_FILE: 'perf/env.json'
+          PARAMS_FILE: 'perf/params.json'
         run: ./scripts/run-verification.sh
