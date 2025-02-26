@@ -31,7 +31,7 @@ jobs:
       - name: Run the verification test
         env:
           RESTATE_CONTAINER_IMAGE: 'ghcr.io/restatedev/restate:main'
-          SERVICES_CONTAINER_IMAGE: 'ghcr.io/restatedev/test-services-node:main'
+          SERVICES_CONTAINER_IMAGE: 'ghcr.io/restatedev/test-services-java:main'
           ENV_FILE:  'perf/env.json'
           PARAMS_FILE:  'perf/params.json'
         run: ./scripts/run-verification.sh
