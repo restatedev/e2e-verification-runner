@@ -5,7 +5,7 @@
 #
 export DRIVER_IMAGE=${DRIVER_IMAGE:-"ghcr.io/restatedev/e2e-verification-runner:main"}
 export RESTATE_CONTAINER_IMAGE=${RESTATE_CONTAINER_IMAGE:-"ghcr.io/restatedev/restate:main"}
-export SERVICES_CONTAINER_IMAGE=${SERVICES_CONTAINER_IMAGE:-"ghcr.io/restatedev/test-services-node:main"}
+export SERVICES_CONTAINER_IMAGE="ghcr.io/restatedev/test-services-go:main"
 export ENV_FILE=${ENV_FILE:-"correctness/env.json"}
 export PARAMS_FILE=${PARAMS_FILE:-"correctness/params.json"}
 
@@ -88,7 +88,7 @@ export DEBUG=testcontainers:containers
 
 docker run \
 	--net host\
-	-v /var/run/docker.sock:/var/run/docker.sock	\
+	-v /run/user/1000/podman/podman.sock:/var/run/docker.sock	\
 	--env SERVICES	\
 	--env NODE_ENV \
 	--env NODE_OPTIONS \
