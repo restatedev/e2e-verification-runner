@@ -1,7 +1,7 @@
 {
 	"seed"	: "${SEED}",
-	"keys"	: 2000000,
-	"tests" : 2000000,
-	"maxProgramSize"	:  50,
+	"keys"	: 1000000,
+	"tests" : 1000000,
+	"maxProgramSize"	:  20,
 	"bootstrap"				: true
 }
