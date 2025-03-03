@@ -2,6 +2,12 @@ name: Verification Snapshot tests
 
 on:
   workflow_dispatch: # To start from UI
+    inputs:
+      sdkImage:
+        description: "sdk image, will use 'ghcr.io/restatedev/test-services-node:main' when unspecified"
+        required: false
+        default: "ghcr.io/restatedev/test-services-node:main"
+        type: string
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily
 
@@ -31,7 +37,7 @@ jobs:
       - name: Run the verification test
         env:
           RESTATE_CONTAINER_IMAGE: 'ghcr.io/restatedev/restate:main'
-          SERVICES_CONTAINER_IMAGE: 'ghcr.io/restatedev/test-services-node:main'
+          SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage || 'ghcr.io/restatedev/test-services-node:main' }}
           ENV_FILE:  'snapshotting/env.json'
           PARAMS_FILE:  'snapshotting/params.json'
         run: ./scripts/run-verification.sh
