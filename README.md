@@ -43,4 +43,4 @@ SERVICES=InterpreterDriver node dist/app.js
 SERVICES=InterpreterDriverJob node dist/app.js
 ```
 
-## See [scripts/run.sh](scripts/run.sh)
+## See [`run-verification.sh`](scripts/run-verification.sh)
