@@ -22,7 +22,7 @@ export type ClusterSpec = {
 };
 
 export type ContainerSpec = {
-  image: string;
+  images: string[];
   name: string;
   ports: number[];
   env?: Record<string, string>;
@@ -40,6 +40,7 @@ export type Container = {
   stop(): Promise<void>;
   restart(): Promise<void>;
   restartAndWipeData(): Promise<void>;
+  rollImage(): Promise<void>;
 };
 
 export type Cluster = {
@@ -57,7 +58,7 @@ export function createCluster(spec: ClusterSpec): Cluster {
 class ConfiguredContainer implements Container {
   constructor(
     private readonly spec: ContainerSpec,
-    private readonly genericContainer: GenericContainer,
+    private readonly genericContainers: GenericContainer[],
     private started: StartedTestContainer | undefined,
   ) {}
 
@@ -129,6 +130,25 @@ class ConfiguredContainer implements Container {
     await this.started.exec(["sh", "-c", "rm -rf /restate-data/*/db"]);
     await this.started.restart({ timeout: 1 });
   }
+
+  async rollImage(): Promise<void> {
+    if (this.started === undefined) {
+      throw new Error("Container not started");
+    }
+
+    console.log(`Rolling container ${this.started.getName()}`);
+    await this.started.stop({
+      remove: true,
+    });
+
+    const randomIndex = Math.floor(
+      Math.random() * this.genericContainers.length,
+    );
+    this.started = await this.genericContainers[randomIndex].start();
+    console.log(
+      `Rolled container ${this.started.getName()} to image ${this.spec.images[randomIndex]}`,
+    );
+  }
 }
 
 class ConfiguredCluster implements Cluster {
@@ -169,26 +189,38 @@ class ConfiguredCluster implements Cluster {
     };
 
     const containerPromises = this.spec.containers.map(async (spec) => {
-      const container = new GenericContainer(spec.image)
-        .withExposedPorts(...spec.ports)
-        .withNetwork(network)
-        .withNetworkAliases(spec.name)
-        .withName(spec.name)
-        .withPullPolicy(
-          spec.pull === "always" ? PullPolicy.alwaysPull() : neverPoll,
-        )
-        .withEnvironment(spec.env ?? {});
+      const containers = spec.images.map((image) => {
+        const container = new GenericContainer(image)
+          .withExposedPorts(...spec.ports)
+          .withNetwork(network)
+          .withNetworkAliases(spec.name)
+          .withName(spec.name)
+          .withPullPolicy(
+            spec.pull === "always" ? PullPolicy.alwaysPull() : neverPoll,
+          )
+          .withEnvironment(spec.env ?? {})
+          .withBindMounts([
+            {
+              source:
+                "/Users/till/restate/git/e2e-verification-runner/restate-data",
+              target: "/restate-data",
+              mode: "rw",
+            },
+          ]);
 
-      if (spec.cmd) {
-        container.withCommand(spec.cmd);
-      }
-      if (spec.entryPoint) {
-        container.withEntrypoint(spec.entryPoint);
-      }
+        if (spec.cmd) {
+          container.withCommand(spec.cmd);
+        }
+        if (spec.entryPoint) {
+          container.withEntrypoint(spec.entryPoint);
+        }
 
-      const startedContainer = await container.start();
+        return container;
+      });
 
-      return new ConfiguredContainer(spec, container, startedContainer);
+      const startedContainer = await containers[0].start();
+
+      return new ConfiguredContainer(spec, containers, startedContainer);
     });
 
     const containers = await Promise.all(containerPromises);

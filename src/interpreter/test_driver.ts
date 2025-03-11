@@ -33,6 +33,7 @@ export interface TestConfiguration {
   readonly bootstrap?: boolean;
   readonly crashInterval?: number;
   readonly crashHard?: boolean;
+  readonly rollImages?: boolean;
 }
 
 export enum TestStatus {
@@ -256,6 +257,7 @@ export class Test {
       }
 
       const crashHard = this.conf.crashHard ?? false;
+      const rollImages = this.conf.rollImages ?? false;
 
       for (;;) {
         await sleep(interval);
@@ -272,6 +274,8 @@ export class Test {
         console.log("Killing restate: " + victimName);
         if (crashHard) {
           await container.restartAndWipeData();
+        } else if (rollImages) {
+          await container.rollImage();
         } else {
           await container.restart();
         }
@@ -418,8 +422,8 @@ const verify = async ({
     console.log(
       `\x1b[31m ${now}\tVerification:
           =================================================================================
-      
-          Keys      differ:     ${countDiff}   
+
+          Keys      differ:     ${countDiff}
           Total     difference: ${totalDiff}
           Settled   change:     ${countDiff - lastCountDiff}
           Total     change      ${totalDiff - lastTotalDiff}
