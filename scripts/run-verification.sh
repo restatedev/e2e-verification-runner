@@ -12,7 +12,7 @@ export PARAMS_FILE=${PARAMS_FILE:-"correctness/params.json"}
 SEED=$(date --iso-8601=seconds)
 
 #
-# template a string file 
+# template a string file
 #
 function template_json() {
 	local tmpfile=$(mktemp)
@@ -44,7 +44,7 @@ function fix_path() {
 		echo $local_file_path
 		return 0
 	fi
-	
+
 	echo "could not find ${file_path} or ${local_file_path}"
 	exit 1
 
@@ -52,6 +52,7 @@ function fix_path() {
 
 docker pull ${DRIVER_IMAGE}
 docker pull ${RESTATE_CONTAINER_IMAGE}
+docker pull ${SERVICES_CONTAINER_IMAGE}
 
 # log configuration parameters
 echo "Driver ================================================"
