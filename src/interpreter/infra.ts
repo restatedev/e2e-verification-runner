@@ -119,7 +119,6 @@ class ConfiguredContainer implements Container {
 
     const now = new Date().getTime();
 
-    await this.started.exec(["sh", "-c", "kill -9 1"]);
     await this.started.exec(["sh", "-c", `mkdir -p /ohoh/${now}`]);
     await this.started.exec([
       "sh",
