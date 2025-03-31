@@ -78,6 +78,8 @@ echo ${PARAMS_FILE}
 #
 # The following ENV is needed for the driver program itself.
 #
+export MOUNT_DIR=$(mktemp -d)
+echo "MOUNT_DIR=${MOUNT_DIR}"
 
 export INTERPRETER_DRIVER_CONF=$(template_json ${PARAMS_FILE})
 export UNIVERSE_ENV_JSON=$(template_json ${ENV_FILE})

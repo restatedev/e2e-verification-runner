@@ -15,7 +15,6 @@ import {
   StartedNetwork,
   StartedTestContainer,
 } from "testcontainers";
-import { sleep } from "./utils";
 
 export type ClusterSpec = {
   containers: ContainerSpec[];
@@ -29,6 +28,7 @@ export type ContainerSpec = {
   pull: "always" | "never";
   cmd?: string[];
   entryPoint?: string[];
+  mount?: { source: string; target: string }[];
 };
 
 export type Container = {
@@ -184,9 +184,14 @@ class ConfiguredCluster implements Cluster {
       if (spec.entryPoint) {
         container.withEntrypoint(spec.entryPoint);
       }
-
+      if (spec.mount) {
+        container.withBindMounts(
+          spec.mount.map((m) => {
+            return { source: m.source, target: m.target, mode: "rw" };
+          }),
+        );
+      }
       const startedContainer = await container.start();
-
       return new ConfiguredContainer(spec, container, startedContainer);
     });
 
