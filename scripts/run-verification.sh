@@ -5,9 +5,11 @@
 #
 export DRIVER_IMAGE=${DRIVER_IMAGE:-"ghcr.io/restatedev/e2e-verification-runner:main"}
 export RESTATE_CONTAINER_IMAGE=${RESTATE_CONTAINER_IMAGE:-"ghcr.io/restatedev/restate:main"}
+export RESTATE_RELEASED_CONTAINER_IMAGE=${RESTATE_RELEASED_CONTAINER_IMAGE:-"restatedev/restate:1.2.2"}
 export SERVICES_CONTAINER_IMAGE=${SERVICES_CONTAINER_IMAGE:-"ghcr.io/restatedev/test-services-node:main"}
 export ENV_FILE=${ENV_FILE:-"correctness/env.json"}
 export PARAMS_FILE=${PARAMS_FILE:-"correctness/params.json"}
+
 
 SEED=$(date --iso-8601=seconds)
 
@@ -52,6 +54,7 @@ function fix_path() {
 
 docker pull ${DRIVER_IMAGE}
 docker pull ${RESTATE_CONTAINER_IMAGE}
+docker pull ${RESTATE_RELEASED_CONTAINER_IMAGE}
 docker pull ${SERVICES_CONTAINER_IMAGE}
 
 # log configuration parameters
@@ -62,6 +65,10 @@ docker inspect ${DRIVER_IMAGE} | grep org.opencontainers.image.revision
 echo "RESTATE ================================================"
 echo ${RESTATE_CONTAINER_IMAGE}
 docker inspect ${RESTATE_CONTAINER_IMAGE} | grep org.opencontainers.image.revision
+
+echo "RESTATE (released) ========================================="
+echo ${RESTATE_RELEASED_CONTAINER_IMAGE}
+docker inspect ${RESTATE_RELEASED_CONTAINER_IMAGE} | grep org.opencontainers.image.revision
 
 echo "SERVICE ================================================"
 echo ${SERVICES_CONTAINER_IMAGE}
