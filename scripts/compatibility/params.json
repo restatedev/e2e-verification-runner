@@ -1,8 +1,13 @@
 {
-	"seed"	: "${SEED}",
-	"keys"	: 1000000,
-	"tests" : 100000,
-	"maxProgramSize"	:  20,
-	"crashInterval"		: 900000,
-	"bootstrap"				: true
+  "seed": "${SEED}",
+  "keys": 1000000,
+  "tests": 100000,
+  "maxProgramSize": 20,
+  "crashInterval": 900000,
+  "bootstrap": true,
+  "rollingUpdate": {
+    "n1": "forward",
+    "n2": "forward",
+    "n3": "forward"
+  }
 }

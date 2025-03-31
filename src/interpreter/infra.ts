@@ -21,13 +21,26 @@ export type ClusterSpec = {
 };
 
 export type ContainerSpec = {
+  // the latest version of the image is used
   image: string;
+  // an ordered list of images, from oldest to newest.
+  // this is only relevant for rolling upgrades tests.
+  // depending on the mode of the rolling upgrade test, the test will
+  // traverse the list of images in the order specified.
+  images?: string[];
+  // the container name
   name: string;
+  // expose the following ports to the host
   ports: number[];
+  // environment variables to pass to the container
   env?: Record<string, string>;
+  // pull the image always or never
   pull: "always" | "never";
+  // use the following command when starting the container
   cmd?: string[];
+  // use entry point when starting the container
   entryPoint?: string[];
+  // mount the following volumes (always rw mode)
   mount?: { source: string; target: string }[];
 };
 

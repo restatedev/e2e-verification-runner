@@ -33,6 +33,13 @@ export interface TestConfiguration {
   readonly bootstrap?: boolean;
   readonly crashInterval?: number;
   readonly crashHard?: boolean;
+  // specify the rolling upgrade strategy for the containers listed in the following config.
+  // For any containers in this list, the test will attempt to upgrade the container
+  // to the next image in the list.
+  // <!> note: for any container that is specified in this list, it's corresponding env
+  ///    definition must contain a list of ordered images.
+  //     see: ContainerSpec.images in infra.ts
+  readonly rollingUpgrade?: Record<string, "forward" | "backward" | "random">;
 }
 
 export enum TestStatus {
@@ -162,19 +169,28 @@ export class Test {
       `🌍 RESTATE_ADMIN_URL=${adminUrl} ./target/debug/restate inv ls`,
     );
     for (const uri of deployments) {
-      const res = await fetch(`${adminUrl}/deployments`, {
-        method: "POST",
-        body: JSON.stringify({
-          uri,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-      if (!res.ok) {
-        throw new Error(
-          `unable to register ${uri} because: ${await res.text()}`,
-        );
+      for (;;) {
+        try {
+          const res = await fetch(`${adminUrl}/deployments`, {
+            method: "POST",
+            body: JSON.stringify({
+              uri,
+            }),
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+          if (!res.ok) {
+            throw new Error(
+              `unable to register ${uri} because: ${await res.text()}`,
+            );
+          }
+          break;
+        } catch (e) {
+          console.error(e);
+          console.log(`Trying again...`);
+          await sleep(2000);
+        }
       }
     }
     console.log("Registered deployments");
