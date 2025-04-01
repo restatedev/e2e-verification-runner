@@ -9,6 +9,7 @@ export RESTATE_RELEASED_CONTAINER_IMAGE=${RESTATE_RELEASED_CONTAINER_IMAGE:-"res
 export SERVICES_CONTAINER_IMAGE=${SERVICES_CONTAINER_IMAGE:-"ghcr.io/restatedev/test-services-node:main"}
 export ENV_FILE=${ENV_FILE:-"correctness/env.json"}
 export PARAMS_FILE=${PARAMS_FILE:-"correctness/params.json"}
+export MODE=${MODE:-"forward"}
 
 
 SEED=$(date --iso-8601=seconds)

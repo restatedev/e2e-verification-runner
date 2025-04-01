@@ -6,8 +6,8 @@
   "crashInterval": 900000,
   "bootstrap": true,
   "rollingUpdate": {
-    "n1": "forward",
-    "n2": "forward",
-    "n3": "forward"
+    "n1": "${MODE}",
+    "n2": "${MODE}",
+    "n3": "${MODE}"
   }
 }
