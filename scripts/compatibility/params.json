@@ -3,7 +3,7 @@
   "keys": 1000000,
   "tests": 100000,
   "maxProgramSize": 20,
-  "crashInterval": 900000,
+  "crashInterval": 120000,
   "bootstrap": true,
   "rollingUpdate": {
     "n1": "${MODE}",
