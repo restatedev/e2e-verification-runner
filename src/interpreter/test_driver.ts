@@ -23,6 +23,11 @@ export interface TestConfigurationDeployments {
   deployments: string[];
 }
 
+export type TestConfigurationRollingUpgrade = Record<
+  string,
+  "forward" | "backward" | "random"
+>;
+
 export interface TestConfiguration {
   readonly ingress: string;
   readonly seed: string;
@@ -39,7 +44,7 @@ export interface TestConfiguration {
   // <!> note: for any container that is specified in this list, it's corresponding env
   ///    definition must contain a list of ordered images.
   //     see: ContainerSpec.images in infra.ts
-  readonly rollingUpgrade?: Record<string, "forward" | "backward" | "random">;
+  readonly rollingUpgrade?: TestConfigurationRollingUpgrade;
 }
 
 export enum TestStatus {
@@ -214,7 +219,7 @@ export class Test {
 
     if (this.conf.bootstrap) {
       this.containers = createCluster(CLUSTER);
-      await this.containers.start();
+      await this.containers.start(this.conf.rollingUpgrade ?? {});
       console.log(this.containers);
 
       console.log("Mapped ports of the restate leader");
@@ -288,6 +293,11 @@ export class Test {
         console.log("Killing restate: " + victimName);
         if (crashHard) {
           await container.restartAndWipeData();
+        } else if (
+          this.conf.rollingUpgrade &&
+          victimName in this.conf.rollingUpgrade
+        ) {
+          await container.rollImage();
         } else {
           await container.restart();
         }

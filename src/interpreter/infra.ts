@@ -15,6 +15,7 @@ import {
   StartedNetwork,
   StartedTestContainer,
 } from "testcontainers";
+import { TestConfigurationRollingUpgrade } from "./test_driver";
 
 export type ClusterSpec = {
   containers: ContainerSpec[];
@@ -53,10 +54,14 @@ export type Container = {
   stop(): Promise<void>;
   restart(): Promise<void>;
   restartAndWipeData(): Promise<void>;
+  // returns true if the rolling upgrade/downgrade was successful
+  // unsuccessful if there are no more images to roll to.
+  // throws (rejects) if anything goes wrong.
+  rollImage(): Promise<boolean>;
 };
 
 export type Cluster = {
-  start(): Promise<void>;
+  start(upgrade: TestConfigurationRollingUpgrade): Promise<void>;
   stop(): Promise<void>;
   container(name: string): Container;
   hostContainerUrl(name: string, port: number): string;
@@ -70,8 +75,9 @@ export function createCluster(spec: ClusterSpec): Cluster {
 class ConfiguredContainer implements Container {
   constructor(
     private readonly spec: ContainerSpec,
-    private readonly genericContainer: GenericContainer,
+    private readonly restContainers: GenericContainer[],
     private started: StartedTestContainer | undefined,
+    private readonly mode: "none" | "forward" | "backward" | "random",
   ) {}
 
   get name() {
@@ -125,6 +131,43 @@ class ConfiguredContainer implements Container {
     await this.started.restart({ timeout: 1 });
   }
 
+  async rollImage(): Promise<boolean> {
+    if (this.started === undefined) {
+      throw new Error("Container not started");
+    }
+    let nextContainer: GenericContainer | undefined = undefined;
+    switch (this.mode) {
+      case "forward": {
+        nextContainer = this.restContainers.shift();
+        break;
+      }
+      case "backward": {
+        nextContainer = this.restContainers.pop();
+        break;
+      }
+      case "random": {
+        const index = Math.floor(Math.random() * this.restContainers.length);
+        nextContainer = this.restContainers[index];
+        break;
+      }
+      case "none": {
+        nextContainer = undefined;
+        break;
+      }
+    }
+    if (nextContainer === undefined) {
+      return false;
+    }
+    console.log(
+      `Rolling upgrade ${this.name} to ${nextContainer} (mode: ${this.mode})`,
+    );
+    await this.started.stop({
+      remove: true,
+    });
+    this.started = await nextContainer.start();
+    return true;
+  }
+
   async restartAndWipeData() {
     if (this.started === undefined) {
       throw new Error("Container not started");
@@ -140,6 +183,47 @@ class ConfiguredContainer implements Container {
     ]);
     await this.started.exec(["sh", "-c", "rm -rf /restate-data/*/db"]);
     await this.started.restart({ timeout: 1 });
+  }
+}
+
+/**
+ * Extract the upgrade policy for a container.
+ */
+function upgradePolicy(
+  rollingUpgrade: TestConfigurationRollingUpgrade,
+  spec: ContainerSpec,
+):
+  | { mode: "none"; image: string; images: string[] }
+  | { mode: "forward"; image: string; images: string[] }
+  | { mode: "backward"; image: string; images: string[] }
+  | { mode: "random"; image: string; images: string[] } {
+  const mode = rollingUpgrade[spec.name];
+  if (mode === undefined) {
+    return { mode: "none", image: spec.image, images: [] };
+  }
+  if (spec.images === undefined) {
+    throw new Error(
+      `Container ${spec.name} has no images for rolling upgrade, but you specified a rolling upgrade test for this container.`,
+    );
+  }
+  switch (mode) {
+    case "forward": {
+      return { mode: "forward", image: spec.images[0], images: spec.images };
+    }
+    case "backward": {
+      return {
+        mode: "backward",
+        image: spec.images[spec.images.length - 1],
+        images: spec.images,
+      };
+    }
+    case "random": {
+      const index = Math.floor(Math.random() * spec.images.length);
+      const image = spec.images[index];
+      return { mode: "random", image, images: spec.images };
+    }
+    default:
+      throw new Error(`Unknown rolling upgrade mode: ${mode}`);
   }
 }
 
@@ -171,7 +255,7 @@ class ConfiguredCluster implements Cluster {
     return `http://${container.host()}:${port}`;
   }
 
-  async start(): Promise<void> {
+  async start(rollingUpgrade: TestConfigurationRollingUpgrade): Promise<void> {
     const network = await new Network().start();
 
     const neverPoll: ImagePullPolicy = {
@@ -181,7 +265,9 @@ class ConfiguredCluster implements Cluster {
     };
 
     const containerPromises = this.spec.containers.map(async (spec) => {
-      const container = new GenericContainer(spec.image)
+      const { mode, image, images } = upgradePolicy(rollingUpgrade, spec);
+
+      const container = new GenericContainer(image)
         .withExposedPorts(...spec.ports)
         .withNetwork(network)
         .withNetworkAliases(spec.name)
@@ -204,8 +290,42 @@ class ConfiguredCluster implements Cluster {
           }),
         );
       }
+
+      const restContainers = images.map((image) => {
+        const restContainer = new GenericContainer(image)
+          .withExposedPorts(...spec.ports)
+          .withNetwork(network)
+          .withNetworkAliases(spec.name)
+          .withName(spec.name)
+          .withPullPolicy(
+            spec.pull === "always" ? PullPolicy.alwaysPull() : neverPoll,
+          )
+          .withEnvironment(spec.env ?? {});
+
+        if (spec.cmd) {
+          restContainer.withCommand(spec.cmd);
+        }
+        if (spec.entryPoint) {
+          restContainer.withEntrypoint(spec.entryPoint);
+        }
+        if (spec.mount) {
+          restContainer.withBindMounts(
+            spec.mount.map((m) => {
+              return { source: m.source, target: m.target, mode: "rw" };
+            }),
+          );
+        }
+
+        return restContainer;
+      });
+
       const startedContainer = await container.start();
-      return new ConfiguredContainer(spec, container, startedContainer);
+      return new ConfiguredContainer(
+        spec,
+        restContainers,
+        startedContainer,
+        mode,
+      );
     });
 
     const containers = await Promise.all(containerPromises);
