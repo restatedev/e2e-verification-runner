@@ -1,4 +1,4 @@
-name: Verification Forward Compatibility tests
+name: Verification Compatibility tests
 
 on:
   workflow_dispatch: # To start from UI
@@ -9,10 +9,12 @@ on:
         default: "ghcr.io/restatedev/test-services-node:main"
         type: string
       mode:
-        description: "mode, will use 'forward' when unspecified"
-        required: false
-        default: "forward"
-        type: string
+        type: choice
+        description: "compatibility test mode (forward: from old to new version, backward: from new to old version, random: back and forth between versions)"
+        options:
+          - forward
+          - backward
+          - random
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily
 
@@ -24,10 +26,11 @@ env:
 
 jobs:
   build:
+    name: Compatibility tests (${{ inputs.mode || 'forward' }})
     # prevent running on forks
     if: github.repository_owner == 'restatedev'
     runs-on: warp-ubuntu-latest-x64-16x # warpbuild runner
-    timeout-minutes: 250 
+    timeout-minutes: 250
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,9 +44,9 @@ jobs:
 
       - name: Run the verification test
         env:
-          RESTATE_CONTAINER_IMAGE: 'ghcr.io/restatedev/restate:main'
+          RESTATE_CONTAINER_IMAGE: "ghcr.io/restatedev/restate:main"
           SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage || 'ghcr.io/restatedev/test-services-node:main' }}
-          ENV_FILE:  'compatibility/env.json'
-          PARAMS_FILE:  'compatibility/params.json'
+          ENV_FILE: "compatibility/env.json"
+          PARAMS_FILE: "compatibility/params.json"
           MODE: ${{ inputs.mode || 'forward' }}
         run: ./scripts/run-verification.sh
