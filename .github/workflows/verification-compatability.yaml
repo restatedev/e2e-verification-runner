@@ -1,6 +1,18 @@
 name: Verification Compatibility tests
 
 on:
+  workflow_call:
+    inputs:
+      sdkImage:
+        description: "sdk image, will use 'ghcr.io/restatedev/test-services-node:main' when unspecified"
+        required: false
+        default: "ghcr.io/restatedev/test-services-node:main"
+        type: string
+      mode:
+        type: string
+        description: "compatibility test mode (forward: from old to new version, backward: from new to old version, random: back and forth between versions)"
+        required: false
+        default: "forward"
   workflow_dispatch: # To start from UI
     inputs:
       sdkImage:
@@ -15,8 +27,6 @@ on:
           - forward
           - backward
           - random
-  schedule:
-    - cron: "12 0 * * *" # 00:12am UTC daily
 
 env:
   REPOSITORY_OWNER: ${{ github.repository_owner }}

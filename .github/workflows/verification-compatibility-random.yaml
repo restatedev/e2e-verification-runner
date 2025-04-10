@@ -1,0 +1,14 @@
+name: Verification Compatibility Random
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "12 0 * * *" # 00:12am UTC daily
+
+jobs:
+  verification-compatibility-random:
+    name: Verification Compatibility Random
+    uses: ./.github/workflows/verification-compatibility.yml
+    secrets: inherit
+    with:
+      mode: random

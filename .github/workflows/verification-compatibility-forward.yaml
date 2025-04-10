@@ -1,0 +1,14 @@
+name: Verification Compatibility Forward
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "12 0 * * *" # 00:12am UTC daily
+
+jobs:
+  verification-compatibility-forward:
+    name: Verification Compatibility Forward
+    uses: ./.github/workflows/verification-compatibility.yml
+    secrets: inherit
+    with:
+      mode: forward
