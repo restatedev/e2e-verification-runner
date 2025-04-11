@@ -8,7 +8,7 @@ on:
 jobs:
   verification-compatibility-backward:
     name: Verification Compatibility Backward
-    uses: ./.github/workflows/verification-compatibility.yml
+    uses: ./.github/workflows/verification-compatibility.yaml
     secrets: inherit
     with:
       mode: backward

@@ -8,7 +8,7 @@ on:
 jobs:
   verification-compatibility-random:
     name: Verification Compatibility Random
-    uses: ./.github/workflows/verification-compatibility.yml
+    uses: ./.github/workflows/verification-compatibility.yaml
     secrets: inherit
     with:
       mode: random
