@@ -78,7 +78,7 @@ class ConfiguredContainer implements Container {
     private readonly restContainers: GenericContainer[],
     private started: StartedTestContainer | undefined,
     private readonly mode: "none" | "forward" | "backward" | "random",
-  ) {}
+  ) { }
 
   get name() {
     return this.spec.name;
@@ -231,7 +231,7 @@ class ConfiguredCluster implements Cluster {
   private containers: Map<string, ConfiguredContainer> | undefined;
   private network: StartedNetwork | undefined;
 
-  constructor(private readonly spec: ClusterSpec) {}
+  constructor(private readonly spec: ClusterSpec) { }
 
   hostContainerUrl(name: string, port: number): string {
     if (this.containers === undefined) {
@@ -341,14 +341,23 @@ class ConfiguredCluster implements Cluster {
     const c = this.containers;
     this.containers = undefined;
 
+    const n = this.network;
+    this.network = undefined;
+
+    if (process.env.DISABLE_CLEANUP) {
+      console.log("Skipping stop of containers");
+      return;
+    }
+
     if (c) {
       const startedContainers = [...c.values()];
+      console.log("Stopping containers", startedContainers.map((c) => c.name));
       const futures = startedContainers.map((c) => c.stop());
       await Promise.all(futures);
     }
-    if (this.network) {
-      await this.network.stop();
-      this.network = undefined;
+
+    if (n) {
+      await n.stop();
     }
   }
 
