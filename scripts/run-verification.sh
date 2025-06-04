@@ -97,6 +97,10 @@ export NODE_OPTIONS="--max-old-space-size=4096"
 export AWS_LAMBDA_FUNCTION_NAME=1
 export DEBUG=testcontainers:containers
 
+if [ -n "${DISABLE_CLEANUP}" ]; then
+	export TESTCONTAINERS_RYUK_DISABLED=true
+fi
+
 docker run \
 	--net host\
 	-v /var/run/docker.sock:/var/run/docker.sock	\
@@ -107,4 +111,6 @@ docker run \
 	--env DEBUG \
 	--env INTERPRETER_DRIVER_CONF \
 	--env UNIVERSE_ENV_JSON \
+	--env DISABLE_CLEANUP \
+	--env TESTCONTAINERS_RYUK_DISABLED \
 	${DRIVER_IMAGE}
