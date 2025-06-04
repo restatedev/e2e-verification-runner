@@ -445,7 +445,7 @@ const verify = async ({
       `\x1b[31m ${now}\tVerification:
           =================================================================================
       
-          Keys      differ:     ${countDiff}   
+          Keys      differ:     ${countDiff}
           Total     difference: ${totalDiff}
           Settled   change:     ${countDiff - lastCountDiff}
           Total     change      ${totalDiff - lastTotalDiff}
