@@ -6,7 +6,7 @@ COPY . .
 RUN npm install
 RUN npm run build
 
-FROM node:23 as prod
+FROM node:23 AS prod
 WORKDIR /usr/src/app
 
 # Install app dependencies
