@@ -11,6 +11,7 @@ import {
   GenericContainer,
   ImagePullPolicy,
   Network,
+  PortWithOptionalBinding,
   PullPolicy,
   StartedNetwork,
   StartedTestContainer,
@@ -32,7 +33,10 @@ export type ContainerSpec = {
   // the container name
   name: string;
   // expose the following ports to the host
-  ports: number[];
+  // this list can contain numbers (for exposing a single port)
+  // or strings (for exposing a port and mapping it to a host port)
+  // in the format "host:container"
+  ports: (number | string)[];
   // environment variables to pass to the container
   env?: Record<string, string>;
   // pull the image always or never
@@ -78,7 +82,7 @@ class ConfiguredContainer implements Container {
     private readonly restContainers: GenericContainer[],
     private started: StartedTestContainer | undefined,
     private readonly mode: "none" | "forward" | "backward" | "random",
-  ) { }
+  ) {}
 
   get name() {
     return this.spec.name;
@@ -98,7 +102,15 @@ class ConfiguredContainer implements Container {
     const started = this.started;
     return this.spec.ports.reduce(
       (acc, port) => {
-        acc[port] = started.getMappedPort(port);
+        if (typeof port === "number") {
+          acc[port] = started.getMappedPort(port);
+        } else {
+          // Handle "host:container" format
+          const [hostPort, containerPort] = port
+            .split(":")
+            .map((p) => parseInt(p, 10));
+          acc[containerPort] = hostPort;
+        }
         return acc;
       },
       {} as Record<number, number>,
@@ -231,7 +243,7 @@ class ConfiguredCluster implements Cluster {
   private containers: Map<string, ConfiguredContainer> | undefined;
   private network: StartedNetwork | undefined;
 
-  constructor(private readonly spec: ClusterSpec) { }
+  constructor(private readonly spec: ClusterSpec) {}
 
   hostContainerUrl(name: string, port: number): string {
     if (this.containers === undefined) {
@@ -267,8 +279,23 @@ class ConfiguredCluster implements Cluster {
     const containerPromises = this.spec.containers.map(async (spec) => {
       const { mode, image, images } = upgradePolicy(rollingUpgrade, spec);
 
+      let ports: PortWithOptionalBinding[] = spec.ports.map((port) => {
+        if (typeof port === "number") {
+          return port;
+        } else {
+          const [host, container] = port
+            .split(":", 2)
+            .map((p) => parseInt(p, 10));
+
+          return {
+            host: host,
+            container: container,
+          };
+        }
+      });
+
       const container = new GenericContainer(image)
-        .withExposedPorts(...spec.ports)
+        .withExposedPorts(...ports)
         .withNetwork(network)
         .withNetworkAliases(spec.name)
         .withName(spec.name)
@@ -293,7 +320,7 @@ class ConfiguredCluster implements Cluster {
 
       const restContainers = images.map((image) => {
         const restContainer = new GenericContainer(image)
-          .withExposedPorts(...spec.ports)
+          .withExposedPorts(...ports)
           .withNetwork(network)
           .withNetworkAliases(spec.name)
           .withName(spec.name)
@@ -351,7 +378,10 @@ class ConfiguredCluster implements Cluster {
 
     if (c) {
       const startedContainers = [...c.values()];
-      console.log("Stopping containers", startedContainers.map((c) => c.name));
+      console.log(
+        "Stopping containers",
+        startedContainers.map((c) => c.name),
+      );
       const futures = startedContainers.map((c) => c.stop());
       await Promise.all(futures);
     }
