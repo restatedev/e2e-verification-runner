@@ -39,6 +39,7 @@ export const timeout = <T>(duration: number): Promise<T> =>
 
 export type RetryOptions<T> = {
   timeout?: number;
+  attempts?: number;
   tag: string;
   op: () => Promise<T>;
 };
@@ -46,7 +47,8 @@ export type RetryOptions<T> = {
 export const retry = async <T>(opts: RetryOptions<T>): Promise<T> => {
   let error;
   const ts = opts.timeout ?? 10_000;
-  for (let i = 0; i < 360; i++) {
+  const tries = opts.attempts ?? 360;
+  for (let i = 0; i < tries; i++) {
     try {
       return await Promise.race([opts.op(), timeout<T>(ts)]);
     } catch (e) {

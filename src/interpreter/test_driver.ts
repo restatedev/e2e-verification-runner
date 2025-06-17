@@ -135,7 +135,7 @@ export class Test {
   }
 
   async ingressReady(ingressUrl: string) {
-    for (; ;) {
+    for (;;) {
       try {
         const rc = await fetch(`${ingressUrl}/restate/health`);
         if (rc.ok) {
@@ -157,7 +157,7 @@ export class Test {
     if (!deployments) {
       throw new Error("Missing register.deployments (array of uri string)");
     }
-    for (; ;) {
+    for (;;) {
       try {
         const rc = await fetch(`${adminUrl}/health`);
         if (rc.ok) {
@@ -174,7 +174,7 @@ export class Test {
       `🌍 RESTATE_ADMIN_URL=${adminUrl} ./target/debug/restate inv ls`,
     );
     for (const uri of deployments) {
-      for (; ;) {
+      for (;;) {
         try {
           const res = await fetch(`${adminUrl}/deployments`, {
             method: "POST",
@@ -278,7 +278,7 @@ export class Test {
 
       const crashHard = this.conf.crashHard ?? false;
 
-      for (; ;) {
+      for (;;) {
         await sleep(interval);
         if (
           this.status == TestStatus.FAILED ||
@@ -397,7 +397,8 @@ const verify = async ({
         return getCounts({ adminUrl: url!, numInterpreters });
       },
       tag: "getCounts",
-      timeout: 10_000,
+      timeout: 60_000,
+      attempts: 10,
     });
 
     let countDiff = 0;
