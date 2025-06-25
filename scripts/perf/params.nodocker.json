@@ -1,0 +1,13 @@
+{
+  "seed": "${SEED}",
+  "keys": 100,
+  "tests": 1000,
+  "maxProgramSize": 20,
+  "bootstrap": false,
+  "ingress": ["http://localhost:8080"],
+  "adminUrl": "http://localhost:9070",
+  "register": {
+    "adminUrl": "http://localhost:9070",
+    "deployments": ["http://localhost:9080"]
+  }
+}
