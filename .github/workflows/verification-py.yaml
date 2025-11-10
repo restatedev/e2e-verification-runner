@@ -7,6 +7,10 @@ on:
         description: "The restate container image"
         required: true
         default: "ghcr.io/restatedev/restate:main"
+      servicesContainerImage:
+        description: "The services container image"
+        required: true
+        default: "ghcr.io/restatedev/test-services-python:main"
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily
 
@@ -36,5 +40,5 @@ jobs:
       - name: Run the verification test
         env:
           RESTATE_CONTAINER_IMAGE: ${{ inputs.restateContainerImage || 'ghcr.io/restatedev/restate:main' }}
-          SERVICES_CONTAINER_IMAGE: 'ghcr.io/restatedev/test-services-python:main'
+          SERVICES_CONTAINER_IMAGE: ${{ inputs.servicesContainerImage || 'ghcr.io/restatedev/test-services-python:main' }}
         run: ./scripts/run-verification.sh
