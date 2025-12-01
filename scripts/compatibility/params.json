@@ -5,7 +5,7 @@
   "maxProgramSize": 20,
   "crashInterval": 120000,
   "bootstrap": true,
-  "rollingUpdate": {
+  "rollingUpgrade": {
     "n1": "${MODE}",
     "n2": "${MODE}",
     "n3": "${MODE}"
