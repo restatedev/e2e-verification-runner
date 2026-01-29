@@ -79,7 +79,7 @@ export function createCluster(spec: ClusterSpec): Cluster {
 class ConfiguredContainer implements Container {
   constructor(
     private readonly spec: ContainerSpec,
-    private readonly restContainers: GenericContainer[],
+    private readonly restContainers: [string, GenericContainer][],
     private started: StartedTestContainer | undefined,
     private readonly mode: "none" | "forward" | "backward" | "random",
   ) {}
@@ -147,31 +147,32 @@ class ConfiguredContainer implements Container {
     if (this.started === undefined) {
       throw new Error("Container not started");
     }
-    let nextContainer: GenericContainer | undefined = undefined;
+    let next: [string, GenericContainer] | undefined = undefined;
     switch (this.mode) {
       case "forward": {
-        nextContainer = this.restContainers.shift();
+        next = this.restContainers.shift();
         break;
       }
       case "backward": {
-        nextContainer = this.restContainers.pop();
+        next = this.restContainers.pop();
         break;
       }
       case "random": {
         const index = Math.floor(Math.random() * this.restContainers.length);
-        nextContainer = this.restContainers[index];
+        next = this.restContainers[index];
         break;
       }
       case "none": {
-        nextContainer = undefined;
+        next = undefined;
         break;
       }
     }
-    if (nextContainer === undefined) {
+    if (next === undefined) {
       return false;
     }
+    const [nextImage, nextContainer] = next;
     console.log(
-      `Rolling upgrade ${this.name} to ${nextContainer} (mode: ${this.mode})`,
+      `Rolling upgrade ${this.name} to ${nextImage} (mode: ${this.mode})`,
     );
     await this.started.stop({
       remove: true,
@@ -318,33 +319,35 @@ class ConfiguredCluster implements Cluster {
         );
       }
 
-      const restContainers = images.map((image) => {
-        const restContainer = new GenericContainer(image)
-          .withExposedPorts(...ports)
-          .withNetwork(network)
-          .withNetworkAliases(spec.name)
-          .withName(spec.name)
-          .withPullPolicy(
-            spec.pull === "always" ? PullPolicy.alwaysPull() : neverPoll,
-          )
-          .withEnvironment(spec.env ?? {});
+      const restContainers: [string, GenericContainer][] = images.map(
+        (image) => {
+          const restContainer = new GenericContainer(image)
+            .withExposedPorts(...ports)
+            .withNetwork(network)
+            .withNetworkAliases(spec.name)
+            .withName(spec.name)
+            .withPullPolicy(
+              spec.pull === "always" ? PullPolicy.alwaysPull() : neverPoll,
+            )
+            .withEnvironment(spec.env ?? {});
 
-        if (spec.cmd) {
-          restContainer.withCommand(spec.cmd);
-        }
-        if (spec.entryPoint) {
-          restContainer.withEntrypoint(spec.entryPoint);
-        }
-        if (spec.mount) {
-          restContainer.withBindMounts(
-            spec.mount.map((m) => {
-              return { source: m.source, target: m.target, mode: "rw" };
-            }),
-          );
-        }
+          if (spec.cmd) {
+            restContainer.withCommand(spec.cmd);
+          }
+          if (spec.entryPoint) {
+            restContainer.withEntrypoint(spec.entryPoint);
+          }
+          if (spec.mount) {
+            restContainer.withBindMounts(
+              spec.mount.map((m) => {
+                return { source: m.source, target: m.target, mode: "rw" };
+              }),
+            );
+          }
 
-        return restContainer;
-      });
+          return [image, restContainer];
+        },
+      );
 
       const startedContainer = await container.start();
       return new ConfiguredContainer(
