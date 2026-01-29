@@ -3,6 +3,10 @@ name: Verification tests - Node
 on:
   workflow_dispatch: # To start from UI
     inputs:
+      restateContainerImage:
+        description: "The restate container image"
+        required: true
+        default: "ghcr.io/restatedev/restate:main"
       sdkImage:
         description: "sdk image, will use 'ghcr.io/restatedev/test-services-node:main' when unspecified"
         required: false
@@ -36,6 +40,6 @@ jobs:
 
       - name: Run the verification test
         env:
-          RESTATE_CONTAINER_IMAGE: 'ghcr.io/restatedev/restate:main'
+          RESTATE_CONTAINER_IMAGE: ${{ inputs.restateContainerImage || 'ghcr.io/restatedev/restate:main' }}
           SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage || 'ghcr.io/restatedev/test-services-node:main' }}
         run: ./scripts/run-verification.sh
