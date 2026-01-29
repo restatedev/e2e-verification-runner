@@ -11,3 +11,6 @@ npm-debug.log*
 
 # We ignore the package-lock.json because this is updated every time with dev releases of sdk-typescript
 package-lock.json
+
+# Ignore local claude directory
+.claude/
