@@ -15,8 +15,22 @@ import { ProgramGenerator } from "./test_generator";
 
 import { batch, retry, sleep } from "./utils";
 import { getCounts, sendInterpreter } from "./raw_client";
+import { collectDiagnostics } from "./diagnostics";
 
 const MAX_LAYERS = 3;
+
+// Watchdog: if the verification phase makes no progress (the total difference
+// does not shrink) for this many seconds, we assume the run is wedged, dump
+// diagnostics, and fail fast instead of waiting for the CI job timeout.
+const STALL_TIMEOUT_SECONDS = parseInt(
+  process.env.STUCK_DETECTOR_TIMEOUT_SECONDS ?? "1800",
+  10,
+);
+const STALL_DETECTOR_DISABLED = !!process.env.STUCK_DETECTOR_DISABLED;
+// SIGQUIT the Go SDK service containers to capture goroutine dumps. This
+// crashes them, which is fine since we're aborting the wedged run anyway.
+const STALL_DUMP_GOROUTINES =
+  (process.env.STUCK_DETECTOR_DUMP_GOROUTINES ?? "true") !== "false";
 
 export interface TestConfigurationDeployments {
   adminUrl: string;
@@ -359,6 +373,7 @@ export class Test {
       adminUrl,
       expectedTotal,
       expected,
+      cluster: this.containers,
     });
   }
 
@@ -377,16 +392,24 @@ const verify = async ({
   adminUrl,
   expectedTotal,
   expected,
+  cluster,
 }: {
   numInterpreters: number;
   adminUrl: () => string | undefined;
   expectedTotal: number;
   expected: number[][];
+  cluster?: Cluster;
 }) => {
   const verificationPhaseStartTime = new Date().getTime();
   let lastMillisecond = verificationPhaseStartTime;
   let lastCountDiff = numInterpreters;
   let lastTotalDiff = expectedTotal;
+
+  // Watchdog state: the smallest total difference we've seen so far, and when
+  // we last saw it shrink. If it stops shrinking for too long, the run is stuck.
+  let bestTotalDiff = Number.POSITIVE_INFINITY;
+  let lastProgressAt = verificationPhaseStartTime;
+  let diagnosticsCollected = false;
 
   while (true) {
     await sleep(10 * 1000);
@@ -464,6 +487,38 @@ const verify = async ({
     lastMillisecond = nowMillis;
     lastCountDiff = countDiff;
     lastTotalDiff = totalDiff;
+
+    // Progress watchdog: track whether the total difference keeps shrinking.
+    if (totalDiff < bestTotalDiff) {
+      bestTotalDiff = totalDiff;
+      lastProgressAt = nowMillis;
+    }
+
+    const stalledForMs = nowMillis - lastProgressAt;
+    if (
+      !STALL_DETECTOR_DISABLED &&
+      !diagnosticsCollected &&
+      stalledForMs >= STALL_TIMEOUT_SECONDS * 1000
+    ) {
+      diagnosticsCollected = true;
+      console.error(
+        `\x1b[31mStuck detector: no progress for ${formatDuration(
+          stalledForMs,
+        )} (still ${countDiff} keys / ${totalDiff} total difference off). ` +
+          `Collecting diagnostics and failing the run.\x1b[0m`,
+      );
+      await collectDiagnostics({
+        cluster,
+        adminUrl: adminUrl(),
+        dumpGoroutines: STALL_DUMP_GOROUTINES,
+      });
+      throw new Error(
+        `Verification stuck: no progress for ${formatDuration(
+          stalledForMs,
+        )} with ${countDiff} keys (${totalDiff} total) still differing. ` +
+          `See diagnostics above.`,
+      );
+    }
   }
 };
 

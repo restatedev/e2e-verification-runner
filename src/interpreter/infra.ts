@@ -9,6 +9,7 @@
 
 import {
   GenericContainer,
+  getContainerRuntimeClient,
   ImagePullPolicy,
   Network,
   PortWithOptionalBinding,
@@ -16,7 +17,38 @@ import {
   StartedNetwork,
   StartedTestContainer,
 } from "testcontainers";
+import { Readable } from "stream";
 import { TestConfigurationRollingUpgrade } from "./test_driver";
+
+/**
+ * Reads a (potentially following) log stream for at most `windowMs` milliseconds
+ * and resolves with whatever was collected. Using a time window means this works
+ * for both running containers (where the docker log stream follows and never ends)
+ * and stopped containers (where it ends on its own).
+ */
+function readStreamForWindow(
+  stream: Readable,
+  windowMs: number,
+): Promise<string> {
+  return new Promise((resolve) => {
+    let data = "";
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      stream.destroy();
+      resolve(data);
+    };
+    const timer = setTimeout(finish, windowMs);
+    stream.on("data", (chunk) => (data += chunk.toString()));
+    stream.on("end", finish);
+    stream.on("close", finish);
+    stream.on("error", finish);
+  });
+}
 
 export type ClusterSpec = {
   containers: ContainerSpec[];
@@ -55,6 +87,13 @@ export type Container = {
   ports(): Record<number, number>;
   url(port: number): string;
   host(): string;
+  // the underlying docker container id
+  id(): string;
+  // send a unix signal (e.g. "SIGQUIT") to the container's main process
+  signal(signal: string): Promise<void>;
+  // grab up to `lines` of the most recent container logs, reading the (following)
+  // stream for at most `readWindowMs` ms before giving up
+  tailLogs(lines: number, readWindowMs?: number): Promise<string>;
   stop(): Promise<void>;
   restart(): Promise<void>;
   restartAndWipeData(): Promise<void>;
@@ -68,6 +107,8 @@ export type Cluster = {
   start(upgrade: TestConfigurationRollingUpgrade): Promise<void>;
   stop(): Promise<void>;
   container(name: string): Container;
+  // names of all containers in the cluster
+  containerNames(): string[];
   hostContainerUrl(name: string, port: number): string;
   internalContainerUrl(name: string, port: number): string;
 };
@@ -126,6 +167,32 @@ class ConfiguredContainer implements Container {
       throw new Error("Container not started");
     }
     return this.started.getHost();
+  }
+
+  id(): string {
+    if (this.started === undefined) {
+      throw new Error("Container not started");
+    }
+    return this.started.getId();
+  }
+
+  async signal(signal: string): Promise<void> {
+    if (this.started === undefined) {
+      throw new Error("Container not started");
+    }
+    const client = await getContainerRuntimeClient();
+    const dockerContainer = client.container.getById(this.started.getId());
+    // dockerode types `kill` options as `{}`, but it forwards `signal` to the
+    // docker kill API (?signal=...), which is exactly what we need.
+    await dockerContainer.kill({ signal } as Record<string, unknown>);
+  }
+
+  async tailLogs(lines: number, readWindowMs = 3000): Promise<string> {
+    if (this.started === undefined) {
+      throw new Error("Container not started");
+    }
+    const stream = await this.started.logs({ tail: lines });
+    return readStreamForWindow(stream, readWindowMs);
   }
 
   async stop() {
@@ -403,5 +470,12 @@ class ConfiguredCluster implements Cluster {
       throw new Error(`Container ${name} not found`);
     }
     return container;
+  }
+
+  containerNames(): string[] {
+    if (this.containers === undefined) {
+      throw new Error("Cluster not started");
+    }
+    return [...this.containers.keys()];
   }
 }
