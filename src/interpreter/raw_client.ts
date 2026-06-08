@@ -51,7 +51,7 @@ export async function sendInterpreter(opts: {
   const { ingressUrl, idempotencyKey, interpreterId, program } = opts;
 
   let url = new URL(
-    `/ObjectInterpreterL0/${interpreterId}/interpret/send`,
+    `/restate/send/ObjectInterpreterL0/${interpreterId}/interpret`,
     ingressUrl,
   );
 
