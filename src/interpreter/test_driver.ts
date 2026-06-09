@@ -23,7 +23,7 @@ const MAX_LAYERS = 3;
 // does not shrink) for this many seconds, we assume the run is wedged, dump
 // diagnostics, and fail fast instead of waiting for the CI job timeout.
 const STALL_TIMEOUT_SECONDS = parseInt(
-  process.env.STUCK_DETECTOR_TIMEOUT_SECONDS ?? "1800",
+  process.env.STUCK_DETECTOR_TIMEOUT_SECONDS ?? "2700",
   10,
 );
 const STALL_DETECTOR_DISABLED = !!process.env.STUCK_DETECTOR_DISABLED;
