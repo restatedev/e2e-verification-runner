@@ -42,4 +42,8 @@ jobs:
         env:
           RESTATE_CONTAINER_IMAGE: ${{ inputs.restateContainerImage || 'ghcr.io/restatedev/restate:main' }}
           SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage || 'ghcr.io/restatedev/test-services-java:main' }}
+          # Run with the perf settings (heavier, longer workload), same as the Go profile.
+          # This lets us compare across SDKs whether a hang is SDK-specific or a runtime problem.
+          ENV_FILE: "perf/env.json"
+          PARAMS_FILE: "perf/params.json"
         run: ./scripts/run-verification.sh
