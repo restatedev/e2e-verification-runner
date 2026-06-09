@@ -14,8 +14,37 @@ import { CLUSTER } from "./dist_spec";
 import { ProgramGenerator } from "./test_generator";
 
 import { batch, retry, sleep } from "./utils";
-import { getCounts, sendInterpreter } from "./raw_client";
+import {
+  getCounts,
+  getInvocationStatusCounts,
+  sendInterpreter,
+} from "./raw_client";
 import { collectDiagnostics, DifferingKey } from "./diagnostics";
+
+// A paused invocation never self-resolves (it waits for a manual resume), so
+// even one means the verifier will hang forever. Require it to persist for a
+// couple of polls before failing, to avoid acting on a transient read.
+const PAUSED_CONFIRM_POLLS = 2;
+
+function computeDifferingKeys(
+  expected: number[][],
+  counters: number[][],
+): DifferingKey[] {
+  const out: DifferingKey[] = [];
+  for (let i = 0; i < expected.length; i++) {
+    for (let j = 0; j < expected[i].length; j++) {
+      if (expected[i][j] !== counters[i][j]) {
+        out.push({
+          layer: i,
+          key: j,
+          expected: expected[i][j],
+          actual: counters[i][j],
+        });
+      }
+    }
+  }
+  return out;
+}
 
 // Cap how many differing keys we introspect in diagnostics, to bound output if
 // a large number of keys diverge.
@@ -469,6 +498,7 @@ const verify = async ({
   let bestTotalDiff = Number.POSITIVE_INFINITY;
   let lastProgressAt = verificationPhaseStartTime;
   let diagnosticsCollected = false;
+  let pausedPolls = 0;
 
   while (true) {
     await sleep(10 * 1000);
@@ -482,6 +512,17 @@ const verify = async ({
       timeout: 60_000,
       attempts: 10,
     });
+
+    // Best-effort snapshot of interpreter invocation statuses. Used to surface
+    // paused invocations (which never self-resolve) instead of silently waiting
+    // out the no-progress timeout. A transient failure here just skips the check.
+    let statusCounts: Record<string, number> = {};
+    try {
+      statusCounts = await getInvocationStatusCounts({ adminUrl: adminUrl()! });
+    } catch (e) {
+      console.warn("Could not fetch invocation status counts:", e);
+    }
+    const pausedCount = statusCounts["paused"] ?? 0;
 
     let countDiff = 0;
     let totalDiff = 0;
@@ -543,9 +584,48 @@ const verify = async ({
           \x1b[0m`,
     );
 
+    const statusStr =
+      Object.entries(statusCounts)
+        .map(([s, c]) => `${s}=${c}`)
+        .join(", ") || "n/a";
+    console.log(`          Invocation statuses: ${statusStr}`);
+
     lastMillisecond = nowMillis;
     lastCountDiff = countDiff;
     lastTotalDiff = totalDiff;
+
+    // Shared fast-fail: dump diagnostics (including per-key journal/invocation
+    // history) and abort the run with the given reason.
+    const collectAndFail = async (reason: string) => {
+      diagnosticsCollected = true;
+      console.error(`\x1b[31m${reason} Collecting diagnostics.\x1b[0m`);
+      await collectDiagnostics({
+        cluster,
+        adminUrl: adminUrl(),
+        dumpGoroutines: STALL_DUMP_GOROUTINES,
+        differingKeys: computeDifferingKeys(expected, counters).slice(
+          0,
+          MAX_DIFFERING_KEYS_TO_DUMP,
+        ),
+      });
+      throw new Error(`${reason} See diagnostics above.`);
+    };
+
+    // Paused invocations never self-resolve, so the verifier would hang forever.
+    // Detect them directly and fail fast instead of waiting out the no-progress
+    // timeout. Require persistence across a couple of polls to avoid transients.
+    if (pausedCount > 0) {
+      pausedPolls += 1;
+    } else {
+      pausedPolls = 0;
+    }
+    if (!diagnosticsCollected && pausedPolls >= PAUSED_CONFIRM_POLLS) {
+      await collectAndFail(
+        `Verification stuck: ${pausedCount} paused invocation(s) detected ` +
+          `(${pausedPolls} consecutive polls) — paused invocations never ` +
+          `self-resolve, so the counters can never converge.`,
+      );
+    }
 
     // Progress watchdog: track whether the total difference keeps shrinking.
     if (totalDiff < bestTotalDiff) {
@@ -559,41 +639,9 @@ const verify = async ({
       !diagnosticsCollected &&
       stalledForMs >= STALL_TIMEOUT_SECONDS * 1000
     ) {
-      diagnosticsCollected = true;
-      console.error(
-        `\x1b[31mStuck detector: no progress for ${formatDuration(
-          stalledForMs,
-        )} (still ${countDiff} keys / ${totalDiff} total difference off). ` +
-          `Collecting diagnostics and failing the run.\x1b[0m`,
-      );
-
-      // Collect the keys whose counter does not match, so diagnostics can dump
-      // each object's state/journal/invocation history.
-      const differingKeys: DifferingKey[] = [];
-      for (let i = 0; i < expected.length; i++) {
-        for (let j = 0; j < expected[i].length; j++) {
-          if (expected[i][j] !== counters[i][j]) {
-            differingKeys.push({
-              layer: i,
-              key: j,
-              expected: expected[i][j],
-              actual: counters[i][j],
-            });
-          }
-        }
-      }
-
-      await collectDiagnostics({
-        cluster,
-        adminUrl: adminUrl(),
-        dumpGoroutines: STALL_DUMP_GOROUTINES,
-        differingKeys: differingKeys.slice(0, MAX_DIFFERING_KEYS_TO_DUMP),
-      });
-      throw new Error(
-        `Verification stuck: no progress for ${formatDuration(
-          stalledForMs,
-        )} with ${countDiff} keys (${totalDiff} total) still differing. ` +
-          `See diagnostics above.`,
+      await collectAndFail(
+        `Verification stuck: no progress for ${formatDuration(stalledForMs)} ` +
+          `with ${countDiff} keys (${totalDiff} total) still differing.`,
       );
     }
   }

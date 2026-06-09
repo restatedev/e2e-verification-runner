@@ -47,14 +47,17 @@ SERVICES=InterpreterDriverJob node dist/app.js
 ## Stuck-run detector
 
 During the verification phase the driver watches whether the state keeps
-converging towards the expected counters. If the total difference stops
-shrinking for a while (the run is wedged, e.g. an invocation got stuck), the
-driver collects diagnostics and fails fast instead of letting the CI job run
-until its timeout. The diagnostics include:
+converging towards the expected counters. It fails fast (instead of letting the
+CI job run until its timeout) and collects diagnostics in two cases: (1) the
+total difference stops shrinking for a while (wedged), or (2) **paused**
+interpreter invocations are detected — these never self-resolve, so the counters
+can never converge. Each poll logs an invocation-status breakdown
+(`running`/`suspended`/`backing-off`/`paused`/…) alongside the diff. The
+diagnostics include:
 
-- the not-yet-completed invocations from the restate admin API
-  (`sys_invocation`: status, what each is `suspended_waiting_for_*`, the caller
-  chain, last failure),
+- a status histogram of interpreter invocations, and the not-yet-completed
+  invocations from the restate admin API (`sys_invocation`: status, what each is
+  `suspended_waiting_for_*`, the caller chain, last failure),
 - for each differing interpreter key, that object's current `state`, invocation
   history (`sys_invocation`, all statuses), `sys_journal`, and `sys_idempotency`
   mapping — so a lost (or extra) increment can be localized to a specific

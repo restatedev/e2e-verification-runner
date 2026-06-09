@@ -212,6 +212,18 @@ export async function collectDiagnostics(
   banner("BEGIN");
 
   if (adminUrl) {
+    await safe("invocation status histogram", async () => {
+      banner("invocation status histogram (sys_invocation)");
+      const data = await queryRestate(
+        adminUrl,
+        `select status, count(*) as count from sys_invocation ` +
+          `where target_service_name like 'ObjectInterpreter%' ` +
+          `or target_service_name = 'ServiceInterpreterHelper' ` +
+          `group by status`,
+      );
+      console.log(JSON.stringify(data, null, 2));
+    });
+
     await safe("non-completed invocations", async () => {
       banner("non-completed invocations (sys_invocation)");
       const data = await queryNonCompletedInvocations(adminUrl);
