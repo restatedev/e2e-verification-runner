@@ -14,8 +14,42 @@ const RESTATE_NODE_NAME = /^n\d+$/;
 
 // How many log lines to grab per container.
 const LOG_TAIL_LINES = 5000;
+// Goroutine dumps can be large (one stack per leaked goroutine), so grab more
+// lines and read the stream a bit longer than for ordinary log tails.
+const GOROUTINE_DUMP_TAIL_LINES = 50000;
+const GOROUTINE_DUMP_READ_WINDOW_MS = 8000;
 // How long to wait after sending SIGQUIT before grabbing the goroutine dump.
 const GOROUTINE_DUMP_GRACE_MS = 4000;
+
+// The interpreter virtual objects, indexed by layer (ObjectInterpreterL0/L1/L2).
+const INTERPRETER_SERVICE = (layer: number) => `ObjectInterpreterL${layer}`;
+
+/**
+ * Runs a single SQL query against the restate admin introspection API and
+ * returns the parsed JSON. See the schema at
+ * https://docs.restate.dev/references/sql-introspection.
+ */
+async function queryRestate(adminUrl: string, sql: string): Promise<unknown> {
+  const res = await fetch(`${adminUrl}/query`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ query: sql }),
+  });
+  if (!res.ok) {
+    throw new Error(`query failed: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+export interface DifferingKey {
+  layer: number;
+  key: number;
+  expected: number;
+  actual: number;
+}
 
 /**
  * Queries the restate introspection API for every invocation that has not yet
@@ -89,6 +123,74 @@ export interface DiagnosticsOptions {
   // this crashes those processes, so it is only appropriate once we've decided
   // the run is wedged and is going to be aborted.
   dumpGoroutines: boolean;
+  // the interpreter keys whose counter does not match the expected value. For
+  // each of these we dump the object's state, invocation history and journal so
+  // we can localize a lost (or extra) increment.
+  differingKeys?: DifferingKey[];
+}
+
+/**
+ * For each differing interpreter key, dumps the current state, the invocation
+ * history (all statuses, not just non-completed), the journal, and the
+ * idempotency mapping for that virtual object. This is what lets us localize a
+ * lost increment: it shows whether the responsible invocation ran, what it
+ * journaled, and whether the increment entry is present.
+ *
+ * The journal/invocation history is only available if retention was enabled for
+ * the interpreter services (see INTERPRETER_JOURNAL_RETENTION); otherwise these
+ * queries return empty for already-completed invocations.
+ */
+async function dumpDifferingKeys(
+  adminUrl: string,
+  differingKeys: DifferingKey[],
+): Promise<void> {
+  banner(`differing keys (${differingKeys.length})`);
+  for (const d of differingKeys) {
+    const service = INTERPRETER_SERVICE(d.layer);
+    const key = String(d.key);
+    console.log(
+      `\n[diagnostics] ${service} key=${key}: expected=${d.expected} actual=${d.actual} (diff=${d.expected - d.actual})`,
+    );
+
+    await safe(`state for key ${key}`, async () => {
+      const data = await queryRestate(
+        adminUrl,
+        `select service_name, service_key, key, value_utf8 from state where service_key = '${key}'`,
+      );
+      console.log("state:", JSON.stringify(data, null, 2));
+    });
+
+    await safe(`invocations for key ${key}`, async () => {
+      const data = await queryRestate(
+        adminUrl,
+        `select id, target, status, completed_at, invoked_by, invoked_by_id, invoked_by_target ` +
+          `from sys_invocation ` +
+          `where target_service_name like 'ObjectInterpreter%' and target_service_key = '${key}' ` +
+          `limit 1000`,
+      );
+      console.log("invocations:", JSON.stringify(data, null, 2));
+    });
+
+    await safe(`journal for key ${key}`, async () => {
+      const data = await queryRestate(
+        adminUrl,
+        `select j.id, j.index, j.entry_type, j.name, j.completed, j.invoked_target, j.entry_json ` +
+          `from sys_journal j join sys_invocation i on j.id = i.id ` +
+          `where i.target_service_name like 'ObjectInterpreter%' and i.target_service_key = '${key}' ` +
+          `order by j.id, j.index limit 5000`,
+      );
+      console.log("journal:", JSON.stringify(data, null, 2));
+    });
+
+    await safe(`idempotency for key ${key}`, async () => {
+      const data = await queryRestate(
+        adminUrl,
+        `select service_name, idempotency_key, invocation_id, service_handler ` +
+          `from sys_idempotency where service_key = '${key}' limit 1000`,
+      );
+      console.log("idempotency:", JSON.stringify(data, null, 2));
+    });
+  }
 }
 
 /**
@@ -105,7 +207,7 @@ export interface DiagnosticsOptions {
 export async function collectDiagnostics(
   opts: DiagnosticsOptions,
 ): Promise<void> {
-  const { cluster, adminUrl, dumpGoroutines } = opts;
+  const { cluster, adminUrl, dumpGoroutines, differingKeys } = opts;
 
   banner("BEGIN");
 
@@ -115,6 +217,12 @@ export async function collectDiagnostics(
       const data = await queryNonCompletedInvocations(adminUrl);
       console.log(JSON.stringify(data, null, 2));
     });
+
+    if (differingKeys && differingKeys.length > 0) {
+      await safe("differing keys", () =>
+        dumpDifferingKeys(adminUrl, differingKeys),
+      );
+    }
   } else {
     console.log("[diagnostics] no admin url available, skipping invocations");
   }
@@ -156,7 +264,11 @@ export async function collectDiagnostics(
     for (const name of sdkServices) {
       await safe(`goroutine dump of ${name}`, async () => {
         banner(`goroutine dump: ${name}`);
-        console.log(await cluster.container(name).tailLogs(LOG_TAIL_LINES));
+        console.log(
+          await cluster
+            .container(name)
+            .tailLogs(GOROUTINE_DUMP_TAIL_LINES, GOROUTINE_DUMP_READ_WINDOW_MS),
+        );
       });
     }
   } else {

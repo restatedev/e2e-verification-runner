@@ -15,6 +15,7 @@ $ npm run build
 ```
 
 ## Build and push the docker image:
+
 A node services Docker image is used by the verification tests in Kubernetes.
 
 ```shell
@@ -53,10 +54,18 @@ until its timeout. The diagnostics include:
 
 - the not-yet-completed invocations from the restate admin API
   (`sys_invocation`: status, what each is `suspended_waiting_for_*`, the caller
-  chain, last failure), and
+  chain, last failure),
+- for each differing interpreter key, that object's current `state`, invocation
+  history (`sys_invocation`, all statuses), `sys_journal`, and `sys_idempotency`
+  mapping — so a lost (or extra) increment can be localized to a specific
+  object/invocation/journal entry, and
 - a goroutine dump of every SDK service container (via `SIGQUIT`, which is why
   `GOTRACEBACK=all` is set for those containers) plus a tail of every
   container's logs.
+
+The journal/invocation history is only retained for already-completed
+invocations if retention was enabled for the interpreter services (see
+`INTERPRETER_JOURNAL_RETENTION` below).
 
 Configure via environment variables:
 
@@ -66,5 +75,11 @@ Configure via environment variables:
 - `STUCK_DETECTOR_DUMP_GOROUTINES` — set to `false` to skip `SIGQUIT`ing the SDK
   containers (default `true`).
 - `STUCK_DETECTOR_DISABLED` — set to any value to disable the watchdog entirely.
+- `INTERPRETER_JOURNAL_RETENTION` — journal/idempotency retention applied to the
+  interpreter services after registration, in the restate "friendly" duration
+  format (default `3 hours`; set to `off` to leave service retention untouched).
+  Retaining ~1M journals is storage-heavy, and the offending invocation may
+  complete early in a run, so to reliably capture it the retention must span the
+  whole run — tune this (and/or `tests` in the params file) for focused hunts.
 
 ## See [`run-verification.sh`](scripts/run-verification.sh)

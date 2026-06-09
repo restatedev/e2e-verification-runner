@@ -15,7 +15,23 @@ import { ProgramGenerator } from "./test_generator";
 
 import { batch, retry, sleep } from "./utils";
 import { getCounts, sendInterpreter } from "./raw_client";
-import { collectDiagnostics } from "./diagnostics";
+import { collectDiagnostics, DifferingKey } from "./diagnostics";
+
+// Cap how many differing keys we introspect in diagnostics, to bound output if
+// a large number of keys diverge.
+const MAX_DIFFERING_KEYS_TO_DUMP = 50;
+
+// Retention applied to the interpreter services so that completed invocations'
+// journals and idempotency mappings survive long enough for the stuck detector
+// to dump them. Uses the restate "friendly" duration format, e.g. "3 hours".
+// Set to "off" (or empty) to leave the services' retention untouched.
+//
+// NOTE: the offending invocation may complete early in a run (during the send
+// phase), potentially long before detection, so fully capturing its journal
+// needs retention spanning the whole run. Retaining ~1M journals is
+// storage-heavy; tune this (and/or `tests` in the params file) for focused hunts.
+const INTERPRETER_JOURNAL_RETENTION =
+  process.env.INTERPRETER_JOURNAL_RETENTION ?? "3 hours";
 
 const MAX_LAYERS = 3;
 
@@ -215,6 +231,47 @@ export class Test {
     console.log("Registered deployments");
   }
 
+  // Enables journal + idempotency retention on the interpreter services so that,
+  // when the stuck detector fires tens of minutes into a run, the offending
+  // object's journal and invocation history are still queryable. Best-effort:
+  // a failure here only degrades diagnostics, so it must not fail the run.
+  //
+  // idempotency_retention caps journal_retention for invocations carrying an
+  // idempotency key (the top-level interpreter sends do), so we set both.
+  async configureInterpreterRetention(adminUrl?: string) {
+    const retention = INTERPRETER_JOURNAL_RETENTION.trim();
+    if (!adminUrl || retention === "" || retention.toLowerCase() === "off") {
+      return;
+    }
+    const services = [
+      ...Array.from({ length: MAX_LAYERS }, (_, l) => `ObjectInterpreterL${l}`),
+      "ServiceInterpreterHelper",
+    ];
+    for (const name of services) {
+      try {
+        const res = await fetch(`${adminUrl}/services/${name}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            journal_retention: retention,
+            idempotency_retention: retention,
+          }),
+        });
+        if (!res.ok) {
+          console.warn(
+            `Could not set retention on ${name}: ${res.status} ${await res.text()}`,
+          );
+        } else {
+          console.log(
+            `Set journal/idempotency retention=${retention} on ${name}`,
+          );
+        }
+      } catch (e) {
+        console.warn(`Could not set retention on ${name}:`, e);
+      }
+    }
+  }
+
   async go(): Promise<TestStatus> {
     try {
       return await this.startTesting();
@@ -275,6 +332,8 @@ export class Test {
     if (deployments) {
       await this.registerEndpoints(adminUrl(), deployments);
     }
+    // Enable retention so diagnostics can inspect completed invocations later.
+    await this.configureInterpreterRetention(adminUrl());
     for (const url of ingressUrls) {
       await this.ingressReady(url.toString());
     }
@@ -507,10 +566,28 @@ const verify = async ({
         )} (still ${countDiff} keys / ${totalDiff} total difference off). ` +
           `Collecting diagnostics and failing the run.\x1b[0m`,
       );
+
+      // Collect the keys whose counter does not match, so diagnostics can dump
+      // each object's state/journal/invocation history.
+      const differingKeys: DifferingKey[] = [];
+      for (let i = 0; i < expected.length; i++) {
+        for (let j = 0; j < expected[i].length; j++) {
+          if (expected[i][j] !== counters[i][j]) {
+            differingKeys.push({
+              layer: i,
+              key: j,
+              expected: expected[i][j],
+              actual: counters[i][j],
+            });
+          }
+        }
+      }
+
       await collectDiagnostics({
         cluster,
         adminUrl: adminUrl(),
         dumpGoroutines: STALL_DUMP_GOROUTINES,
+        differingKeys: differingKeys.slice(0, MAX_DIFFERING_KEYS_TO_DUMP),
       });
       throw new Error(
         `Verification stuck: no progress for ${formatDuration(
