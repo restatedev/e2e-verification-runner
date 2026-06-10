@@ -51,3 +51,11 @@ jobs:
           ENV_FILE: "vqueues/env.json"
           PARAMS_FILE: "vqueues/params.json"
         run: ./scripts/run-verification.sh
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-node-vqueues-log
+          path: verification.log
+          retention-days: 14

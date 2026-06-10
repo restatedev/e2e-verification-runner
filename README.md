@@ -44,6 +44,18 @@ SERVICES=InterpreterDriver node dist/app.js
 SERVICES=InterpreterDriverJob node dist/app.js
 ```
 
+## Downloading run logs
+
+Each verification workflow tees the full run output to `verification.log` and
+uploads it as a build artifact (`verification-<sdk>-log`). Prefer downloading
+that artifact over the GitHub "Download log archive" button — the run-log
+archive is a large, non-resumable stream that often fails mid-download, whereas
+the artifact is compressed and fetched robustly:
+
+```shell
+gh run download <run-id> -R restatedev/e2e-verification-runner -n verification-go-log
+```
+
 ## Stuck-run detector
 
 During the verification phase the driver watches whether the state keeps

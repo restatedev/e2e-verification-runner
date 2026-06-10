@@ -53,3 +53,11 @@ jobs:
           ENV_FILE: "perf/env.json"
           PARAMS_FILE: "perf/params.json"
         run: ./scripts/run-verification.sh
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-java-log
+          path: verification.log
+          retention-days: 14

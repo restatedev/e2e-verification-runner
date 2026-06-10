@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# The driver is piped into `tee` at the end so its output is also captured to a
+# file that CI uploads as an artifact (the GitHub run-log archive is too large
+# to download reliably). pipefail makes the script's exit status reflect the
+# driver's exit rather than tee's.
+set -o pipefail
+
 #
 # input parameters to this script, they all have defaults
 #
@@ -113,4 +119,4 @@ docker run \
 	--env UNIVERSE_ENV_JSON \
 	--env DISABLE_CLEANUP \
 	--env TESTCONTAINERS_RYUK_DISABLED \
-	${DRIVER_IMAGE}
+	${DRIVER_IMAGE} 2>&1 | tee "${VERIFICATION_LOG:-verification.log}"
