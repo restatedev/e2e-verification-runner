@@ -152,43 +152,46 @@ async function dumpDifferingKeys(
       `\n[diagnostics] ${service} key=${key}: expected=${d.expected} actual=${d.actual} (diff=${d.expected - d.actual})`,
     );
 
-    await safe(`state for key ${key}`, async () => {
+    await safe(`state for key ${service}/${key}`, async () => {
       const data = await queryRestate(
         adminUrl,
-        `select service_name, service_key, key, value_utf8 from state where service_key = '${key}'`,
+        `select service_name, service_key, key, value_utf8 from state where service_name = '${service}' and service_key = '${key}'`,
       );
       console.log("state:", JSON.stringify(data, null, 2));
     });
 
-    await safe(`invocations for key ${key}`, async () => {
+    let invocationIds: string[] = [];
+    await safe(`invocations for key ${service}/${key}`, async () => {
       const data = await queryRestate(
         adminUrl,
         `select id, target, status, completed_at, invoked_by, invoked_by_id, invoked_by_target ` +
           `from sys_invocation ` +
-          `where target_service_name like 'ObjectInterpreter%' and target_service_key = '${key}' ` +
-          `limit 1000`,
+          `where target_service_name = '${service}' and target_service_key = '${key}' ` +
+          `limit 50`,
       );
       console.log("invocations:", JSON.stringify(data, null, 2));
+      const rows = (data as { rows?: Array<{ id?: string }> }).rows ?? [];
+      invocationIds = rows
+        .map((r) => r.id)
+        .filter((id): id is string => typeof id === "string");
     });
 
-    await safe(`journal for key ${key}`, async () => {
+    // Journal for those invocations. We filter sys_journal by invocation id
+    // (its `id` column) rather than joining sys_journal with sys_invocation:
+    // the join builds large in-memory hash tables and exhausts Datafusion's
+    // memory pool ("Resources exhausted"). A plain IN filter is a simple scan.
+    await safe(`journal for key ${service}/${key}`, async () => {
+      if (invocationIds.length === 0) {
+        console.log("journal: (no invocations found for this key)");
+        return;
+      }
+      const ids = invocationIds.map((id) => `'${id}'`).join(", ");
       const data = await queryRestate(
         adminUrl,
-        `select j.id, j.index, j.entry_type, j.name, j.completed, j.invoked_target, j.entry_json ` +
-          `from sys_journal j join sys_invocation i on j.id = i.id ` +
-          `where i.target_service_name like 'ObjectInterpreter%' and i.target_service_key = '${key}' ` +
-          `order by j.id, j.index limit 5000`,
+        `select id, "index", entry_type, name, completed, invoked_target, entry_json ` +
+          `from sys_journal where id in (${ids}) order by id, "index" limit 5000`,
       );
       console.log("journal:", JSON.stringify(data, null, 2));
-    });
-
-    await safe(`idempotency for key ${key}`, async () => {
-      const data = await queryRestate(
-        adminUrl,
-        `select service_name, idempotency_key, invocation_id, service_handler ` +
-          `from sys_idempotency where service_key = '${key}' limit 1000`,
-      );
-      console.log("idempotency:", JSON.stringify(data, null, 2));
     });
   }
 }
@@ -249,9 +252,12 @@ export async function collectDiagnostics(
   const restateNodes = names.filter((n) => RESTATE_NODE_NAME.test(n));
   const sdkServices = names.filter((n) => !RESTATE_NODE_NAME.test(n));
 
-  // Tail logs of everything first, so we capture state before we start
-  // crashing things.
-  for (const name of names) {
+  // Tail container logs. When we're going to dump goroutines, the SDK service
+  // containers are tailed (with their dump) in the goroutine section below, so
+  // we only tail the restate nodes here to avoid logging them twice. Without a
+  // goroutine dump, tail everything here.
+  const logContainers = dumpGoroutines ? restateNodes : names;
+  for (const name of logContainers) {
     await safe(`logs of ${name}`, async () => {
       banner(`container logs: ${name} (id=${cluster.container(name).id()})`);
       console.log(await cluster.container(name).tailLogs(LOG_TAIL_LINES));
