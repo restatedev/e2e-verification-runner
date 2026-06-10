@@ -19,6 +19,14 @@ const GOROUTINE_DUMP_GRACE_MS = 4000;
 // The interpreter virtual objects, indexed by layer (ObjectInterpreterL0/L1/L2).
 const INTERPRETER_SERVICE = (layer: number) => `ObjectInterpreterL${layer}`;
 
+// Extracts invocation ids from a /query result ({ rows: [{ id }] }).
+function invocationIdsOf(data: unknown): string[] {
+  const rows = (data as { rows?: Array<{ id?: string }> }).rows ?? [];
+  return rows
+    .map((r) => r.id)
+    .filter((id): id is string => typeof id === "string");
+}
+
 /**
  * Runs a single SQL query against the restate admin introspection API and
  * returns the parsed JSON. See the schema at
@@ -155,7 +163,6 @@ async function dumpDifferingKeys(
       console.log("state:", JSON.stringify(data, null, 2));
     });
 
-    let invocationIds: string[] = [];
     await safe(`invocations for key ${service}/${key}`, async () => {
       const data = await queryRestate(
         adminUrl,
@@ -165,29 +172,9 @@ async function dumpDifferingKeys(
           `limit 50`,
       );
       console.log("invocations:", JSON.stringify(data, null, 2));
-      const rows = (data as { rows?: Array<{ id?: string }> }).rows ?? [];
-      invocationIds = rows
-        .map((r) => r.id)
-        .filter((id): id is string => typeof id === "string");
     });
-
-    // Journal for those invocations. We filter sys_journal by invocation id
-    // (its `id` column) rather than joining sys_journal with sys_invocation:
-    // the join builds large in-memory hash tables and exhausts Datafusion's
-    // memory pool ("Resources exhausted"). A plain IN filter is a simple scan.
-    await safe(`journal for key ${service}/${key}`, async () => {
-      if (invocationIds.length === 0) {
-        console.log("journal: (no invocations found for this key)");
-        return;
-      }
-      const ids = invocationIds.map((id) => `'${id}'`).join(", ");
-      const data = await queryRestate(
-        adminUrl,
-        `select id, "index", entry_type, name, completed, invoked_target, entry_json ` +
-          `from sys_journal where id in (${ids}) order by id, "index" limit 5000`,
-      );
-      console.log("journal:", JSON.stringify(data, null, 2));
-    });
+    // Journals are dumped for all non-completed invocations (see
+    // collectDiagnostics), not per differing key.
   }
 }
 
@@ -222,10 +209,34 @@ export async function collectDiagnostics(
       console.log(JSON.stringify(data, null, 2));
     });
 
+    let nonCompletedIds: string[] = [];
     await safe("non-completed invocations", async () => {
       banner("non-completed invocations (sys_invocation)");
       const data = await queryNonCompletedInvocations(adminUrl);
       console.log(JSON.stringify(data, null, 2));
+      nonCompletedIds = invocationIdsOf(data);
+    });
+
+    // Journal for each non-completed (stuck) invocation, fetched individually
+    // so we cover all of them without a giant IN clause. Filtering sys_journal
+    // by its `id` column avoids joining with sys_invocation, which builds large
+    // in-memory hash tables and exhausts Datafusion's memory pool.
+    await safe("journals for non-completed invocations", async () => {
+      banner(
+        `journals for ${nonCompletedIds.length} non-completed invocations (sys_journal)`,
+      );
+      for (const id of nonCompletedIds) {
+        try {
+          const data = await queryRestate(
+            adminUrl,
+            `select id, "index", entry_type, name, completed, invoked_target, entry_json ` +
+              `from sys_journal where id = '${id}' order by "index" limit 5000`,
+          );
+          console.log(`journal ${id}:`, JSON.stringify(data, null, 2));
+        } catch (e) {
+          console.error(`[diagnostics] failed to fetch journal for ${id}:`, e);
+        }
+      }
     });
 
     if (differingKeys && differingKeys.length > 0) {
