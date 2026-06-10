@@ -1,6 +1,10 @@
 name: Build docker image
 
 on:
+  # Build the image on demand from whichever branch this is dispatched against
+  # (gh workflow run docker.yml --ref <branch>). Requires this trigger to be
+  # present on that branch (and on the default branch to be dispatchable).
+  workflow_dispatch:
   push:
     branches: [main]
     tags:
@@ -41,7 +45,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build docker image
         uses: docker/build-push-action@v3
