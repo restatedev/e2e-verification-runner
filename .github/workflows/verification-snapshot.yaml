@@ -3,6 +3,11 @@ name: Verification Snapshot tests
 on:
   workflow_dispatch: # To start from UI
     inputs:
+      driverImage:
+        description: "e2e-verification-runner (test driver) image"
+        required: false
+        default: "ghcr.io/restatedev/e2e-verification-runner:main"
+        type: string
       sdkImage:
         description: "sdk image, will use 'ghcr.io/restatedev/test-services-node:main' when unspecified"
         required: false
@@ -36,6 +41,7 @@ jobs:
 
       - name: Run the verification test
         env:
+          DRIVER_IMAGE: ${{ inputs.driverImage || 'ghcr.io/restatedev/e2e-verification-runner:main' }}
           RESTATE_CONTAINER_IMAGE: 'ghcr.io/restatedev/restate:main'
           SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage || 'ghcr.io/restatedev/test-services-node:main' }}
           ENV_FILE:  'snapshotting/env.json'
