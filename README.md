@@ -91,7 +91,7 @@ invocations if retention was enabled for the interpreter services (see
 Configure via environment variables:
 
 - `STUCK_DETECTOR_TIMEOUT_SECONDS` — no-progress window before declaring the run
-  stuck (default `2700`). Must be comfortably larger than one verification poll,
+  stuck (default `1800`). Must be comfortably larger than one verification poll,
   which can take many minutes for large key spaces.
 - `STUCK_DETECTOR_DUMP_GOROUTINES` — set to `true` to `SIGQUIT` the SDK service
   containers for a goroutine dump (default off). Only meaningful for Go services,
