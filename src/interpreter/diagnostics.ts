@@ -239,6 +239,54 @@ export async function collectDiagnostics(
       }
     });
 
+    // Follow the pending calls. A suspended caller whose journal has a
+    // "Command: Call" but no matching "Notification: Call" is waiting on the
+    // result of a call it made. The callee is found via invoked_by_id; dumping
+    // its status shows whether the callee is itself stuck or already completed
+    // (i.e. the result notification was lost).
+    const calleeIds = new Set<string>();
+    await safe("callees of non-completed invocations", async () => {
+      banner("callees of non-completed invocations (sys_invocation)");
+      for (const id of nonCompletedIds) {
+        try {
+          const data = await queryRestate(
+            adminUrl,
+            `select id, target, status, completed_at, invoked_by_id ` +
+              `from sys_invocation where invoked_by_id = '${id}'`,
+          );
+          console.log(`callees of ${id}:`, JSON.stringify(data, null, 2));
+          for (const callee of invocationIdsOf(data)) {
+            calleeIds.add(callee);
+          }
+        } catch (e) {
+          console.error(`[diagnostics] failed to fetch callees of ${id}:`, e);
+        }
+      }
+    });
+
+    // Journals for callees we haven't already dumped — in particular callees
+    // that completed but whose result notification the caller never received.
+    await safe("journals for callee invocations", async () => {
+      const newCallees = [...calleeIds].filter(
+        (id) => !nonCompletedIds.includes(id),
+      );
+      banner(
+        `journals for ${newCallees.length} callee invocation(s) not already dumped (sys_journal)`,
+      );
+      for (const id of newCallees) {
+        try {
+          const data = await queryRestate(
+            adminUrl,
+            `select id, "index", entry_type, name, completed, invoked_target, entry_json ` +
+              `from sys_journal where id = '${id}' order by "index" limit 5000`,
+          );
+          console.log(`journal ${id}:`, JSON.stringify(data, null, 2));
+        } catch (e) {
+          console.error(`[diagnostics] failed to fetch journal for ${id}:`, e);
+        }
+      }
+    });
+
     if (differingKeys && differingKeys.length > 0) {
       await safe("differing keys", () =>
         dumpDifferingKeys(adminUrl, differingKeys),
