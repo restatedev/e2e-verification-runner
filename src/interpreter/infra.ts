@@ -16,14 +16,21 @@ import {
   PullPolicy,
   StartedNetwork,
   StartedTestContainer,
+  StoppedTestContainer,
 } from "testcontainers";
 import { createWriteStream, WriteStream } from "fs";
+import { createGzip } from "zlib";
+import { pipeline } from "stream/promises";
 import { TestConfigurationRollingUpgrade } from "./test_driver";
 
 // Directory (inside the driver container) where each container's full log is
 // streamed to `<name>.log`. Mounted to a host dir and uploaded as a CI artifact.
 // Unset => no per-container log capture.
 const CONTAINER_LOGS_DIR = process.env.CONTAINER_LOGS_DIR;
+
+// Default location of the restate data directory inside a runtime container.
+// Used by copyDataDir() when a container has no explicit data bind mount.
+const DEFAULT_DATA_DIR = "/restate-data";
 
 // Pipe a container's (demuxed) log stream to its file. `end: false` so a
 // container stop/restart/roll doesn't close the shared file — we end it
@@ -79,6 +86,14 @@ export type Container = {
   // send a unix signal (e.g. "SIGQUIT") to the container's main process
   signal(signal: string): Promise<void>;
   stop(): Promise<void>;
+  // Gracefully stop the container WITHOUT removing it, so its data dir is frozen
+  // and consistent (the runtime flushes its WAL and closes RocksDB cleanly) and
+  // can be copied afterwards by copyDataDir().
+  freezeForDataCapture(): Promise<void>;
+  // Copy the restate data dir out of the (now stopped) container into the
+  // uploaded container-logs dir as restate-data-<name>.tar.gz. No-op if
+  // CONTAINER_LOGS_DIR is unset (nothing would be uploaded).
+  copyDataDir(): Promise<void>;
   restart(): Promise<void>;
   restartAndWipeData(): Promise<void>;
   // returns true if the rolling upgrade/downgrade was successful
@@ -102,6 +117,10 @@ export function createCluster(spec: ClusterSpec): Cluster {
 }
 
 class ConfiguredContainer implements Container {
+  // Set by freezeForDataCapture(): the stopped-but-not-removed container, kept
+  // around so copyDataDir() can read its (now frozen) filesystem.
+  private stopped?: StoppedTestContainer;
+
   constructor(
     private readonly spec: ContainerSpec,
     private readonly restContainers: [string, GenericContainer][],
@@ -178,6 +197,33 @@ class ConfiguredContainer implements Container {
       this.started = undefined;
     }
     this.logStream?.end();
+  }
+
+  async freezeForDataCapture(): Promise<void> {
+    if (this.started === undefined) {
+      throw new Error("Container not started");
+    }
+    // SIGTERM => restate flushes its WAL and closes RocksDB cleanly. Keep the
+    // container (remove: false) so copyDataDir() can read its filesystem. Don't
+    // end logStream here — cluster.stop() does that during normal cleanup.
+    this.stopped = await this.started.stop({ remove: false, timeout: 30 });
+    this.started = undefined;
+  }
+
+  async copyDataDir(): Promise<void> {
+    if (!CONTAINER_LOGS_DIR) {
+      return; // nowhere to write / nothing uploaded
+    }
+    const source = this.stopped ?? this.started;
+    if (source === undefined) {
+      throw new Error("Container not available");
+    }
+    const dataDir = this.spec.mount?.[0]?.target ?? DEFAULT_DATA_DIR;
+    const tar = await source.copyArchiveFromContainer(dataDir);
+    const out = createWriteStream(
+      `${CONTAINER_LOGS_DIR}/restate-data-${this.spec.name}.tar.gz`,
+    );
+    await pipeline(tar, createGzip(), out);
   }
 
   async restart() {

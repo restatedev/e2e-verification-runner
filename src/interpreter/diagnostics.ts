@@ -126,6 +126,10 @@ export interface DiagnosticsOptions {
   // this crashes those processes, so it is only appropriate once we've decided
   // the run is wedged and is going to be aborted.
   dumpGoroutines: boolean;
+  // whether to capture each runtime node's restate-data dir. This gracefully
+  // stops the nodes (killing the admin API), so it is the last diagnostic step
+  // and only appropriate once the run is being aborted.
+  dumpDataDirs: boolean;
   // the interpreter keys whose counter does not match the expected value. For
   // each of these we dump the object's state, invocation history and journal so
   // we can localize a lost (or extra) increment.
@@ -192,7 +196,8 @@ async function dumpDifferingKeys(
 export async function collectDiagnostics(
   opts: DiagnosticsOptions,
 ): Promise<void> {
-  const { cluster, adminUrl, dumpGoroutines, differingKeys } = opts;
+  const { cluster, adminUrl, dumpGoroutines, dumpDataDirs, differingKeys } =
+    opts;
 
   banner("BEGIN");
 
@@ -331,6 +336,37 @@ export async function collectDiagnostics(
 
   console.log(`[diagnostics] restate nodes: ${restateNodes.join(", ")}`);
   console.log(`[diagnostics] sdk services: ${sdkServices.join(", ")}`);
+
+  // Capture each runtime node's restate-data dir (RocksDB/metadata) so it can be
+  // inspected post-mortem. This MUST be last: we gracefully stop every node
+  // first to freeze its on-disk state (compatibility configs share one bind
+  // mount, so a still-running node would mutate the dir we're copying), which
+  // also kills the admin API used by the queries above. Then we copy each
+  // (now stopped) node's data dir into the uploaded container-logs dir.
+  if (dumpDataDirs) {
+    banner("restate-data capture");
+    for (const name of restateNodes) {
+      await safe(`stopping ${name} for data capture`, async () => {
+        console.log(
+          `[diagnostics] gracefully stopping ${name} to freeze its data dir`,
+        );
+        await cluster.container(name).freezeForDataCapture();
+      });
+    }
+    for (const name of restateNodes) {
+      await safe(`restate-data dir for ${name}`, async () => {
+        console.log(
+          `[diagnostics] capturing ${name} restate-data -> restate-data-${name}.tar.gz`,
+        );
+        await cluster.container(name).copyDataDir();
+      });
+    }
+  } else {
+    console.log(
+      "[diagnostics] restate-data capture disabled " +
+        "(set STUCK_DETECTOR_DUMP_DATA=true to enable)",
+    );
+  }
 
   banner("END");
 }

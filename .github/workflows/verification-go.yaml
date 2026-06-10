@@ -54,6 +54,8 @@ jobs:
           PARAMS_FILE: "perf/params.json"
           # Go services: capture goroutine dumps from the SDK containers on a stuck run.
           STUCK_DETECTOR_DUMP_GOROUTINES: "true"
+          # Capture the runtime nodes' restate-data dirs (RocksDB/metadata) on a stuck run.
+          STUCK_DETECTOR_DUMP_DATA: "true"
         run: ./scripts/run-verification.sh
 
       - name: Upload verification log

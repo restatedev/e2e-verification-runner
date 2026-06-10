@@ -77,6 +77,10 @@ const STALL_DETECTOR_DISABLED = !!process.env.STUCK_DETECTOR_DISABLED;
 // Go test services set STUCK_DETECTOR_DUMP_GOROUTINES=true. Off by default.
 const STALL_DUMP_GOROUTINES =
   process.env.STUCK_DETECTOR_DUMP_GOROUTINES === "true";
+// Capture each runtime node's /restate-data dir on a wedged run. Off by default
+// (the dirs can be large and it gracefully stops the nodes); enable in CI
+// workflows that want the on-disk RocksDB/metadata state for post-mortem.
+const STALL_DUMP_DATA_DIRS = process.env.STUCK_DETECTOR_DUMP_DATA === "true";
 
 export interface TestConfigurationDeployments {
   adminUrl: string;
@@ -604,6 +608,7 @@ const verify = async ({
         cluster,
         adminUrl: adminUrl(),
         dumpGoroutines: STALL_DUMP_GOROUTINES,
+        dumpDataDirs: STALL_DUMP_DATA_DIRS,
         differingKeys: computeDifferingKeys(expected, counters).slice(
           0,
           MAX_DIFFERING_KEYS_TO_DUMP,
