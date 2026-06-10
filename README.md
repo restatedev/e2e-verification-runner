@@ -75,8 +75,8 @@ diagnostics include:
   mapping — so a lost (or extra) increment can be localized to a specific
   object/invocation/journal entry, and
 - a goroutine dump of every SDK service container (via `SIGQUIT`, which is why
-  `GOTRACEBACK=all` is set for those containers) plus a tail of every
-  container's logs.
+  `GOTRACEBACK=all` is set for those containers) — only when enabled, see
+  `STUCK_DETECTOR_DUMP_GOROUTINES` below — plus a tail of every container's logs.
 
 The journal/invocation history is only retained for already-completed
 invocations if retention was enabled for the interpreter services (see
@@ -87,8 +87,9 @@ Configure via environment variables:
 - `STUCK_DETECTOR_TIMEOUT_SECONDS` — no-progress window before declaring the run
   stuck (default `2700`). Must be comfortably larger than one verification poll,
   which can take many minutes for large key spaces.
-- `STUCK_DETECTOR_DUMP_GOROUTINES` — set to `false` to skip `SIGQUIT`ing the SDK
-  containers (default `true`).
+- `STUCK_DETECTOR_DUMP_GOROUTINES` — set to `true` to `SIGQUIT` the SDK service
+  containers for a goroutine dump (default off). Only meaningful for Go services,
+  so the Go verification workflow sets it; other SDKs leave it off.
 - `STUCK_DETECTOR_DISABLED` — set to any value to disable the watchdog entirely.
 - `INTERPRETER_JOURNAL_RETENTION` — journal/idempotency retention applied to the
   interpreter services after registration, in the restate "friendly" duration

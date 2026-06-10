@@ -52,6 +52,8 @@ jobs:
           # This helps discovering memory leaks and bugs in the go SDK.
           ENV_FILE: "perf/env.json"
           PARAMS_FILE: "perf/params.json"
+          # Go services: capture goroutine dumps from the SDK containers on a stuck run.
+          STUCK_DETECTOR_DUMP_GOROUTINES: "true"
         run: ./scripts/run-verification.sh
 
       - name: Upload verification log

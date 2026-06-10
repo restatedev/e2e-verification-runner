@@ -72,10 +72,11 @@ const STALL_TIMEOUT_SECONDS = parseInt(
   10,
 );
 const STALL_DETECTOR_DISABLED = !!process.env.STUCK_DETECTOR_DISABLED;
-// SIGQUIT the Go SDK service containers to capture goroutine dumps. This
-// crashes them, which is fine since we're aborting the wedged run anyway.
+// SIGQUIT the SDK service containers to capture goroutine dumps. Only useful
+// for Go services (and it crashes the process), so it's opt-in: runs that use
+// Go test services set STUCK_DETECTOR_DUMP_GOROUTINES=true. Off by default.
 const STALL_DUMP_GOROUTINES =
-  (process.env.STUCK_DETECTOR_DUMP_GOROUTINES ?? "true") !== "false";
+  process.env.STUCK_DETECTOR_DUMP_GOROUTINES === "true";
 
 export interface TestConfigurationDeployments {
   adminUrl: string;
