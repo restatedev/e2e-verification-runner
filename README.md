@@ -46,11 +46,16 @@ SERVICES=InterpreterDriverJob node dist/app.js
 
 ## Downloading run logs
 
-Each verification workflow tees the full run output to `verification.log` and
-uploads it as a build artifact (`verification-<sdk>-log`). Prefer downloading
-that artifact over the GitHub "Download log archive" button — the run-log
-archive is a large, non-resumable stream that often fails mid-download, whereas
-the artifact is compressed and fetched robustly:
+Each verification workflow uploads a `logs/` build artifact
+(`verification-<sdk>-log`) containing the driver's own output
+(`verification.log`) and one file per container under `containers/` (restate
+nodes + SDK services). Container output is streamed straight to those files
+instead of being multiplexed into the driver's stdout, so the inline GitHub log
+stays small/scrollable and the full per-container logs (including the Go
+goroutine dump on a stuck run) live in the artifact. Prefer downloading the
+artifact over the GitHub "Download log archive" button — the run-log archive is
+a large, non-resumable stream that often fails mid-download, whereas the artifact
+is compressed and fetched robustly:
 
 ```shell
 gh run download <run-id> -R restatedev/e2e-verification-runner -n verification-go-log
@@ -71,12 +76,13 @@ diagnostics include:
   invocations from the restate admin API (`sys_invocation`: status, what each is
   `suspended_waiting_for_*`, the caller chain, last failure),
 - for each differing interpreter key, that object's current `state`, invocation
-  history (`sys_invocation`, all statuses), `sys_journal`, and `sys_idempotency`
-  mapping — so a lost (or extra) increment can be localized to a specific
-  object/invocation/journal entry, and
-- a goroutine dump of every SDK service container (via `SIGQUIT`, which is why
-  `GOTRACEBACK=all` is set for those containers) — only when enabled, see
-  `STUCK_DETECTOR_DUMP_GOROUTINES` below — plus a tail of every container's logs.
+  history (`sys_invocation`, all statuses), and `sys_journal` — so a lost (or
+  extra) increment can be localized to a specific object/invocation/journal
+  entry, and
+- on Go runs (when `STUCK_DETECTOR_DUMP_GOROUTINES=true`), a `SIGQUIT` to each
+  SDK service container so it emits a goroutine dump (`GOTRACEBACK=all` is set
+  for those containers). The dump and all container output are captured in the
+  per-container log files (see "Downloading run logs"), not tailed inline.
 
 The journal/invocation history is only retained for already-completed
 invocations if retention was enabled for the interpreter services (see

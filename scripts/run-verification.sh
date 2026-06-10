@@ -95,13 +95,20 @@ echo ${PARAMS_FILE}
 export MOUNT_DIR=$(mktemp -d)
 echo "MOUNT_DIR=${MOUNT_DIR}"
 
+# Directory for all logs uploaded as a CI artifact: the driver's own output
+# (verification.log) plus one file per container, written by the driver into the
+# mounted container-logs dir.
+export LOG_DIR=${LOG_DIR:-"$(pwd)/logs"}
+export CONTAINER_LOGS_DIR_HOST="${LOG_DIR}/containers"
+mkdir -p "${CONTAINER_LOGS_DIR_HOST}"
+export VERIFICATION_LOG="${VERIFICATION_LOG:-${LOG_DIR}/verification.log}"
+
 export INTERPRETER_DRIVER_CONF=$(template_json ${PARAMS_FILE})
 export UNIVERSE_ENV_JSON=$(template_json ${ENV_FILE})
 export SERVICES=InterpreterDriverJob
 export NODE_ENV=production
 export NODE_OPTIONS="--max-old-space-size=4096"
 export AWS_LAMBDA_FUNCTION_NAME=1
-export DEBUG=testcontainers:containers
 
 if [ -n "${DISABLE_CLEANUP}" ]; then
 	export TESTCONTAINERS_RYUK_DISABLED=true
@@ -114,7 +121,8 @@ docker run \
 	--env NODE_ENV \
 	--env NODE_OPTIONS \
 	--env AWS_LAMBDA_FUNCTION_NAME \
-	--env DEBUG \
+	-v "${CONTAINER_LOGS_DIR_HOST}":/container-logs \
+	--env CONTAINER_LOGS_DIR=/container-logs \
 	--env INTERPRETER_DRIVER_CONF \
 	--env UNIVERSE_ENV_JSON \
 	--env DISABLE_CLEANUP \

@@ -17,37 +17,24 @@ import {
   StartedNetwork,
   StartedTestContainer,
 } from "testcontainers";
-import { Readable } from "stream";
+import { createWriteStream, WriteStream } from "fs";
 import { TestConfigurationRollingUpgrade } from "./test_driver";
 
-/**
- * Reads a (potentially following) log stream for at most `windowMs` milliseconds
- * and resolves with whatever was collected. Using a time window means this works
- * for both running containers (where the docker log stream follows and never ends)
- * and stopped containers (where it ends on its own).
- */
-function readStreamForWindow(
-  stream: Readable,
-  windowMs: number,
-): Promise<string> {
-  return new Promise((resolve) => {
-    let data = "";
-    let settled = false;
-    const finish = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      stream.destroy();
-      resolve(data);
-    };
-    const timer = setTimeout(finish, windowMs);
-    stream.on("data", (chunk) => (data += chunk.toString()));
-    stream.on("end", finish);
-    stream.on("close", finish);
-    stream.on("error", finish);
-  });
+// Directory (inside the driver container) where each container's full log is
+// streamed to `<name>.log`. Mounted to a host dir and uploaded as a CI artifact.
+// Unset => no per-container log capture.
+const CONTAINER_LOGS_DIR = process.env.CONTAINER_LOGS_DIR;
+
+// Pipe a container's (demuxed) log stream to its file. `end: false` so a
+// container stop/restart/roll doesn't close the shared file — we end it
+// ourselves on stop().
+function attachLogStream(
+  builder: GenericContainer,
+  stream: WriteStream | undefined,
+): void {
+  if (stream) {
+    builder.withLogConsumer((s) => s.pipe(stream, { end: false }));
+  }
 }
 
 export type ClusterSpec = {
@@ -91,9 +78,6 @@ export type Container = {
   id(): string;
   // send a unix signal (e.g. "SIGQUIT") to the container's main process
   signal(signal: string): Promise<void>;
-  // grab up to `lines` of the most recent container logs, reading the (following)
-  // stream for at most `readWindowMs` ms before giving up
-  tailLogs(lines: number, readWindowMs?: number): Promise<string>;
   stop(): Promise<void>;
   restart(): Promise<void>;
   restartAndWipeData(): Promise<void>;
@@ -123,6 +107,7 @@ class ConfiguredContainer implements Container {
     private readonly restContainers: [string, GenericContainer][],
     private started: StartedTestContainer | undefined,
     private readonly mode: "none" | "forward" | "backward" | "random",
+    private readonly logStream?: WriteStream,
   ) {}
 
   get name() {
@@ -187,20 +172,12 @@ class ConfiguredContainer implements Container {
     await dockerContainer.kill({ signal } as Record<string, unknown>);
   }
 
-  async tailLogs(lines: number, readWindowMs = 3000): Promise<string> {
-    if (this.started === undefined) {
-      throw new Error("Container not started");
-    }
-    const stream = await this.started.logs({ tail: lines });
-    return readStreamForWindow(stream, readWindowMs);
-  }
-
   async stop() {
-    if (this.started === undefined) {
-      return;
+    if (this.started !== undefined) {
+      await this.started.stop();
+      this.started = undefined;
     }
-    await this.started.stop();
-    this.started = undefined;
+    this.logStream?.end();
   }
 
   async restart() {
@@ -347,6 +324,12 @@ class ConfiguredCluster implements Cluster {
     const containerPromises = this.spec.containers.map(async (spec) => {
       const { mode, image, images } = upgradePolicy(rollingUpgrade, spec);
 
+      const logStream = CONTAINER_LOGS_DIR
+        ? createWriteStream(`${CONTAINER_LOGS_DIR}/${spec.name}.log`, {
+            flags: "a",
+          })
+        : undefined;
+
       let ports: PortWithOptionalBinding[] = spec.ports.map((port) => {
         if (typeof port === "number") {
           return port;
@@ -385,6 +368,7 @@ class ConfiguredCluster implements Cluster {
           }),
         );
       }
+      attachLogStream(container, logStream);
 
       const restContainers: [string, GenericContainer][] = images.map(
         (image) => {
@@ -411,6 +395,7 @@ class ConfiguredCluster implements Cluster {
               }),
             );
           }
+          attachLogStream(restContainer, logStream);
 
           return [image, restContainer];
         },
@@ -422,6 +407,7 @@ class ConfiguredCluster implements Cluster {
         restContainers,
         startedContainer,
         mode,
+        logStream,
       );
     });
 

@@ -61,5 +61,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: verification-go-log
-          path: verification.log
+          path: logs/
           retention-days: 14

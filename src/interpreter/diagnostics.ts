@@ -12,13 +12,8 @@ import { Cluster } from "./infra";
 // restate server nodes are named n1, n2, n3, ...
 const RESTATE_NODE_NAME = /^n\d+$/;
 
-// How many log lines to grab per container.
-const LOG_TAIL_LINES = 5000;
-// Goroutine dumps can be large (one stack per leaked goroutine), so grab more
-// lines and read the stream a bit longer than for ordinary log tails.
-const GOROUTINE_DUMP_TAIL_LINES = 50000;
-const GOROUTINE_DUMP_READ_WINDOW_MS = 8000;
-// How long to wait after sending SIGQUIT before grabbing the goroutine dump.
+// How long to wait after sending SIGQUIT for the runtime to emit the goroutine
+// stacks (into the container's log file) before cleanup stops the containers.
 const GOROUTINE_DUMP_GRACE_MS = 4000;
 
 // The interpreter virtual objects, indexed by layer (ObjectInterpreterL0/L1/L2).
@@ -200,10 +195,10 @@ async function dumpDifferingKeys(
  * Collects everything we need to tell apart an SDK-side hang from a
  * runtime-side hang on a wedged verification run:
  *
- *  1. the set of not-yet-completed invocations and what they are waiting on
- *     (from the restate admin API), and
- *  2. a full goroutine dump of every Go SDK service container (via SIGQUIT),
- *     plus a tail of every container's logs.
+ *  1. the set of not-yet-completed invocations and what they are waiting on,
+ *     plus per-key state/journal (from the restate admin API), and
+ *  2. for Go runs, a SIGQUIT to each SDK service container so it emits a
+ *     goroutine dump into its (separately captured) container log file.
  *
  * Every step is best-effort: a failure in one does not prevent the others.
  */
@@ -252,46 +247,26 @@ export async function collectDiagnostics(
   const restateNodes = names.filter((n) => RESTATE_NODE_NAME.test(n));
   const sdkServices = names.filter((n) => !RESTATE_NODE_NAME.test(n));
 
-  // Tail container logs. When we're going to dump goroutines, the SDK service
-  // containers are tailed (with their dump) in the goroutine section below, so
-  // we only tail the restate nodes here to avoid logging them twice. Without a
-  // goroutine dump, tail everything here.
-  const logContainers = dumpGoroutines ? restateNodes : names;
-  for (const name of logContainers) {
-    await safe(`logs of ${name}`, async () => {
-      banner(`container logs: ${name} (id=${cluster.container(name).id()})`);
-      console.log(await cluster.container(name).tailLogs(LOG_TAIL_LINES));
-    });
-  }
-
+  // Container logs are streamed to per-container files and uploaded as
+  // artifacts (see CONTAINER_LOGS_DIR in infra.ts), so we don't tail them here.
+  // For Go services we still SIGQUIT to trigger a goroutine dump; it goes to the
+  // process's stderr, which is captured in that container's own log file.
   if (dumpGoroutines) {
-    // SIGQUIT makes the Go runtime print stacks of all goroutines and exit.
-    // We send it to all SDK services first, then read their logs, so they can
-    // dump in parallel.
     for (const name of sdkServices) {
       await safe(`SIGQUIT to ${name}`, async () => {
         console.log(
-          `[diagnostics] sending SIGQUIT to ${name} for goroutine dump`,
+          `[diagnostics] sent SIGQUIT to ${name} for a goroutine dump ` +
+            `(captured in its container log file)`,
         );
         await cluster.container(name).signal("SIGQUIT");
       });
     }
-
+    // Let the runtime emit the stacks before cleanup stops the containers and
+    // closes the log files.
     await new Promise((r) => setTimeout(r, GOROUTINE_DUMP_GRACE_MS));
-
-    for (const name of sdkServices) {
-      await safe(`goroutine dump of ${name}`, async () => {
-        banner(`goroutine dump: ${name}`);
-        console.log(
-          await cluster
-            .container(name)
-            .tailLogs(GOROUTINE_DUMP_TAIL_LINES, GOROUTINE_DUMP_READ_WINDOW_MS),
-        );
-      });
-    }
   } else {
     console.log(
-      "[diagnostics] goroutine dumps disabled (STUCK_DETECTOR_DUMP_GOROUTINES=false)",
+      "[diagnostics] goroutine dumps disabled (set STUCK_DETECTOR_DUMP_GOROUTINES=true to enable)",
     );
   }
 
