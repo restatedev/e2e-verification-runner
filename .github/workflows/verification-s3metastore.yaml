@@ -2,6 +2,12 @@ name: Verification Metastore tests
 
 on:
   workflow_dispatch: # To start from UI
+    inputs:
+      restateLogFilter:
+        description: "RESTATE_LOG_FILTER for the runtime nodes (e.g. restate=info)"
+        required: false
+        default: "restate=info"
+        type: string
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily
 
@@ -34,6 +40,7 @@ jobs:
           SERVICES_CONTAINER_IMAGE: "ghcr.io/restatedev/test-services-node:main"
           ENV_FILE: "s3metastore/env.json"
           PARAMS_FILE: "s3metastore/params.json"
+          RESTATE_LOG_FILTER: ${{ inputs.restateLogFilter || 'restate=info' }}
         run: ./scripts/run-verification.sh
 
       - name: Upload verification log

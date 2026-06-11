@@ -16,6 +16,11 @@ on:
         description: "The services container image"
         required: true
         default: "ghcr.io/restatedev/test-services-ruby:main"
+      restateLogFilter:
+        description: "RESTATE_LOG_FILTER for the runtime nodes (e.g. restate=info)"
+        required: false
+        default: "restate=info"
+        type: string
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily
 
@@ -51,6 +56,7 @@ jobs:
           # This lets us compare across SDKs whether a hang is SDK-specific or a runtime problem.
           ENV_FILE: "perf/env.json"
           PARAMS_FILE: "perf/params.json"
+          RESTATE_LOG_FILTER: ${{ inputs.restateLogFilter || 'restate=info' }}
           # Capture the runtime nodes' restate-data dirs (RocksDB/metadata) on a stuck run.
           STUCK_DETECTOR_DUMP_DATA: "true"
         run: ./scripts/run-verification.sh

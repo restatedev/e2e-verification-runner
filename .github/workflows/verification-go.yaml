@@ -17,6 +17,11 @@ on:
         required: false
         default: "ghcr.io/restatedev/test-services-go:main"
         type: string
+      restateLogFilter:
+        description: "RESTATE_LOG_FILTER for the runtime nodes (e.g. restate=info)"
+        required: false
+        default: "restate=info"
+        type: string
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily
 
@@ -52,6 +57,7 @@ jobs:
           # This helps discovering memory leaks and bugs in the go SDK.
           ENV_FILE: "perf/env.json"
           PARAMS_FILE: "perf/params.json"
+          RESTATE_LOG_FILTER: ${{ inputs.restateLogFilter || 'restate=info' }}
           # Go services: capture goroutine dumps from the SDK containers on a stuck run.
           STUCK_DETECTOR_DUMP_GOROUTINES: "true"
           # Capture the runtime nodes' restate-data dirs (RocksDB/metadata) on a stuck run.

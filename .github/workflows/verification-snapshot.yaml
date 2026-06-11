@@ -13,6 +13,11 @@ on:
         required: false
         default: "ghcr.io/restatedev/test-services-node:main"
         type: string
+      restateLogFilter:
+        description: "RESTATE_LOG_FILTER for the runtime nodes (e.g. restate=info)"
+        required: false
+        default: "restate=info"
+        type: string
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily
 
@@ -46,6 +51,7 @@ jobs:
           SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage || 'ghcr.io/restatedev/test-services-node:main' }}
           ENV_FILE:  'snapshotting/env.json'
           PARAMS_FILE:  'snapshotting/params.json'
+          RESTATE_LOG_FILTER: ${{ inputs.restateLogFilter || 'restate=info' }}
         run: ./scripts/run-verification.sh
 
       - name: Upload verification log

@@ -13,6 +13,11 @@ on:
         description: "compatibility test mode (forward: from old to new version, backward: from new to old version, random: back and forth between versions)"
         required: false
         default: "forward"
+      restateLogFilter:
+        description: "RESTATE_LOG_FILTER for the runtime nodes (e.g. restate=info)"
+        required: false
+        default: "restate=info"
+        type: string
   workflow_dispatch: # To start from UI
     inputs:
       sdkImage:
@@ -27,6 +32,11 @@ on:
           - forward
           - backward
           - random
+      restateLogFilter:
+        description: "RESTATE_LOG_FILTER for the runtime nodes (e.g. restate=info)"
+        required: false
+        default: "restate=info"
+        type: string
 
 env:
   REPOSITORY_OWNER: ${{ github.repository_owner }}
@@ -59,6 +69,7 @@ jobs:
           ENV_FILE: "compatibility/env.json"
           PARAMS_FILE: "compatibility/params.json"
           MODE: ${{ inputs.mode || 'forward' }}
+          RESTATE_LOG_FILTER: ${{ inputs.restateLogFilter || 'restate=info' }}
         run: ./scripts/run-verification.sh
 
       - name: Upload verification log
