@@ -19,7 +19,6 @@ import {
   StoppedTestContainer,
 } from "testcontainers";
 import { createWriteStream, WriteStream } from "fs";
-import { createGzip } from "zlib";
 import { pipeline } from "stream/promises";
 import { TestConfigurationRollingUpgrade } from "./test_driver";
 
@@ -91,7 +90,7 @@ export type Container = {
   // can be copied afterwards by copyDataDir().
   freezeForDataCapture(): Promise<void>;
   // Copy the restate data dir out of the (now stopped) container into the
-  // uploaded container-logs dir as restate-data-<name>.tar.gz. No-op if
+  // uploaded container-logs dir as restate-data-<name>.tar. No-op if
   // CONTAINER_LOGS_DIR is unset (nothing would be uploaded).
   copyDataDir(): Promise<void>;
   restart(): Promise<void>;
@@ -221,9 +220,11 @@ class ConfiguredContainer implements Container {
     const dataDir = this.spec.mount?.[0]?.target ?? DEFAULT_DATA_DIR;
     const tar = await source.copyArchiveFromContainer(dataDir);
     const out = createWriteStream(
-      `${CONTAINER_LOGS_DIR}/restate-data-${this.spec.name}.tar.gz`,
+      `${CONTAINER_LOGS_DIR}/restate-data-${this.spec.name}.tar`,
     );
-    await pipeline(tar, createGzip(), out);
+    // RocksDB SST files are already block-compressed, so gzip buys little and
+    // costs real CPU on a multi-GB dir; write the raw tar.
+    await pipeline(tar, out);
   }
 
   async restart() {

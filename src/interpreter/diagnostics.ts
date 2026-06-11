@@ -356,7 +356,7 @@ export async function collectDiagnostics(
     for (const name of restateNodes) {
       await safe(`restate-data dir for ${name}`, async () => {
         console.log(
-          `[diagnostics] capturing ${name} restate-data -> restate-data-${name}.tar.gz`,
+          `[diagnostics] capturing ${name} restate-data -> restate-data-${name}.tar`,
         );
         await cluster.container(name).copyDataDir();
       });
