@@ -17,6 +17,11 @@ on:
         required: false
         default: "ghcr.io/restatedev/test-services-go:main"
         type: string
+      sequentialShuffle:
+        description: "run the Restate cluster with the sequential shuffle"
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily
 
@@ -50,7 +55,7 @@ jobs:
           SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage || 'ghcr.io/restatedev/test-services-go:main' }}
           # Run the go verification test with the perf settings which runs a heavier workload and therefore longer.
           # This helps discovering memory leaks and bugs in the go SDK.
-          ENV_FILE: "perf/env.json"
+          ENV_FILE: ${{ inputs.sequentialShuffle && 'perf/env-sequential-shuffle.json' || 'perf/env.json' }}
           PARAMS_FILE: "perf/params.json"
           # Go services: capture goroutine dumps from the SDK containers on a stuck run.
           STUCK_DETECTOR_DUMP_GOROUTINES: "true"
