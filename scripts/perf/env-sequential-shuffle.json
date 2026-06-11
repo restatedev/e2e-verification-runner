@@ -5,7 +5,7 @@
     "pull": "always",
     "env": {
       "RUST_BACKTRACE": "full",
-      "RESTATE_LOG_FILTER": "restate=info",
+      "RESTATE_LOG_FILTER": "${RESTATE_LOG_FILTER:-restate=info}",
       "RESTATE_LOG_FORMAT": "json",
       "RESTATE_ROLES": "[worker,http-ingress,log-server,admin,metadata-server]",
       "RESTATE_CLUSTER_NAME": "foobar",
@@ -26,7 +26,7 @@
     "pull": "always",
     "env": {
       "RUST_BACKTRACE": "full",
-      "RESTATE_LOG_FILTER": "restate=info",
+      "RESTATE_LOG_FILTER": "${RESTATE_LOG_FILTER:-restate=info}",
       "RESTATE_LOG_FORMAT": "json",
       "RESTATE_ROLES": "[worker,http-ingress,log-server,admin,metadata-server]",
       "RESTATE_CLUSTER_NAME": "foobar",
@@ -48,7 +48,7 @@
     "pull": "always",
     "env": {
       "RUST_BACKTRACE": "full",
-      "RESTATE_LOG_FILTER": "restate=info",
+      "RESTATE_LOG_FILTER": "${RESTATE_LOG_FILTER:-restate=info}",
       "RESTATE_LOG_FORMAT": "json",
       "RESTATE_ROLES": "[worker,http-ingress,log-server,admin,metadata-server]",
       "RESTATE_CLUSTER_NAME": "foobar",
