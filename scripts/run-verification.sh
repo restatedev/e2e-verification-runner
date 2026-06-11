@@ -103,6 +103,11 @@ export CONTAINER_LOGS_DIR_HOST="${LOG_DIR}/containers"
 mkdir -p "${CONTAINER_LOGS_DIR_HOST}"
 export VERIFICATION_LOG="${VERIFICATION_LOG:-${LOG_DIR}/verification.log}"
 
+# Separate dir (outside LOG_DIR) for the large restate-data dumps, uploaded as its
+# own CI artifact so the logs can be downloaded without pulling multi-GB RocksDB data.
+export RESTATE_DATA_DUMP_DIR_HOST="${RESTATE_DATA_DUMP_DIR_HOST:-$(pwd)/restate-data}"
+mkdir -p "${RESTATE_DATA_DUMP_DIR_HOST}"
+
 export INTERPRETER_DRIVER_CONF=$(template_json ${PARAMS_FILE})
 export UNIVERSE_ENV_JSON=$(template_json ${ENV_FILE})
 export SERVICES=InterpreterDriverJob
@@ -123,6 +128,8 @@ docker run \
 	--env AWS_LAMBDA_FUNCTION_NAME \
 	-v "${CONTAINER_LOGS_DIR_HOST}":/container-logs \
 	--env CONTAINER_LOGS_DIR=/container-logs \
+	-v "${RESTATE_DATA_DUMP_DIR_HOST}":/restate-data-dump \
+	--env RESTATE_DATA_DUMP_DIR=/restate-data-dump \
 	--env INTERPRETER_DRIVER_CONF \
 	--env UNIVERSE_ENV_JSON \
 	--env DISABLE_CLEANUP \

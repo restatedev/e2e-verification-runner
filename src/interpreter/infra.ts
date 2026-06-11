@@ -27,6 +27,12 @@ import { TestConfigurationRollingUpgrade } from "./test_driver";
 // Unset => no per-container log capture.
 const CONTAINER_LOGS_DIR = process.env.CONTAINER_LOGS_DIR;
 
+// Directory (inside the driver container) where each runtime node's restate-data
+// dir is written as `restate-data-<name>.tar`. Kept separate from
+// CONTAINER_LOGS_DIR so it can be uploaded as its own (large) CI artifact,
+// downloadable independently of the logs. Unset => no data capture.
+const RESTATE_DATA_DUMP_DIR = process.env.RESTATE_DATA_DUMP_DIR;
+
 // Default location of the restate data directory inside a runtime container.
 // Used by copyDataDir() when a container has no explicit data bind mount.
 const DEFAULT_DATA_DIR = "/restate-data";
@@ -90,8 +96,8 @@ export type Container = {
   // can be copied afterwards by copyDataDir().
   freezeForDataCapture(): Promise<void>;
   // Copy the restate data dir out of the (now stopped) container into the
-  // uploaded container-logs dir as restate-data-<name>.tar. No-op if
-  // CONTAINER_LOGS_DIR is unset (nothing would be uploaded).
+  // uploaded restate-data dump dir as restate-data-<name>.tar. No-op if
+  // RESTATE_DATA_DUMP_DIR is unset (nothing would be uploaded).
   copyDataDir(): Promise<void>;
   restart(): Promise<void>;
   restartAndWipeData(): Promise<void>;
@@ -210,7 +216,7 @@ class ConfiguredContainer implements Container {
   }
 
   async copyDataDir(): Promise<void> {
-    if (!CONTAINER_LOGS_DIR) {
+    if (!RESTATE_DATA_DUMP_DIR) {
       return; // nowhere to write / nothing uploaded
     }
     const source = this.stopped ?? this.started;
@@ -220,7 +226,7 @@ class ConfiguredContainer implements Container {
     const dataDir = this.spec.mount?.[0]?.target ?? DEFAULT_DATA_DIR;
     const tar = await source.copyArchiveFromContainer(dataDir);
     const out = createWriteStream(
-      `${CONTAINER_LOGS_DIR}/restate-data-${this.spec.name}.tar`,
+      `${RESTATE_DATA_DUMP_DIR}/restate-data-${this.spec.name}.tar`,
     );
     // RocksDB SST files are already block-compressed, so gzip buys little and
     // costs real CPU on a multi-GB dir; write the raw tar.
