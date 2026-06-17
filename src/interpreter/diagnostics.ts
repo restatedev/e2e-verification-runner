@@ -206,10 +206,7 @@ export async function collectDiagnostics(
       banner("invocation status histogram (sys_invocation)");
       const data = await queryRestate(
         adminUrl,
-        `select status, count(*) as count from sys_invocation ` +
-          `where target_service_name like 'ObjectInterpreter%' ` +
-          `or target_service_name = 'ServiceInterpreterHelper' ` +
-          `group by status`,
+        `select status, count(*) as count from sys_invocation group by status`,
       );
       console.log(JSON.stringify(data, null, 2));
     });
