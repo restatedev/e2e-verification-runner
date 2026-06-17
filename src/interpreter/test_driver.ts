@@ -67,20 +67,20 @@ const MAX_LAYERS = 3;
 // Watchdog: if the verification phase makes no progress (the total difference
 // does not shrink) for this many seconds, we assume the run is wedged, dump
 // diagnostics, and fail fast instead of waiting for the CI job timeout.
-const STALL_TIMEOUT_SECONDS = parseInt(
+const STUCK_DETECTOR_TIMEOUT_SECONDS = parseInt(
   process.env.STUCK_DETECTOR_TIMEOUT_SECONDS ?? "1800",
   10,
 );
-const STALL_DETECTOR_DISABLED = !!process.env.STUCK_DETECTOR_DISABLED;
+const STUCK_DETECTOR_DISABLED = !!process.env.STUCK_DETECTOR_DISABLED;
 // SIGQUIT the SDK service containers to capture goroutine dumps. Only useful
 // for Go services (and it crashes the process), so it's opt-in: runs that use
 // Go test services set STUCK_DETECTOR_DUMP_GOROUTINES=true. Off by default.
-const STALL_DUMP_GOROUTINES =
+const STUCK_DETECTOR_DUMP_GOROUTINES =
   process.env.STUCK_DETECTOR_DUMP_GOROUTINES === "true";
 // Capture each runtime node's /restate-data dir on a wedged run. Off by default
 // (the dirs can be large and it gracefully stops the nodes); enable in CI
 // workflows that want the on-disk RocksDB/metadata state for post-mortem.
-const STALL_DUMP_DATA_DIRS = process.env.STUCK_DETECTOR_DUMP_DATA === "true";
+const STUCK_DETECTOR_DUMP_DATA = process.env.STUCK_DETECTOR_DUMP_DATA === "true";
 
 export interface TestConfigurationDeployments {
   adminUrl: string;
@@ -607,8 +607,8 @@ const verify = async ({
       await collectDiagnostics({
         cluster,
         adminUrl: adminUrl(),
-        dumpGoroutines: STALL_DUMP_GOROUTINES,
-        dumpDataDirs: STALL_DUMP_DATA_DIRS,
+        dumpGoroutines: STUCK_DETECTOR_DUMP_GOROUTINES,
+        dumpDataDirs: STUCK_DETECTOR_DUMP_DATA,
         differingKeys: computeDifferingKeys(expected, counters).slice(
           0,
           MAX_DIFFERING_KEYS_TO_DUMP,
@@ -641,9 +641,9 @@ const verify = async ({
 
     const stalledForMs = nowMillis - lastProgressAt;
     if (
-      !STALL_DETECTOR_DISABLED &&
+      !STUCK_DETECTOR_DISABLED &&
       !diagnosticsCollected &&
-      stalledForMs >= STALL_TIMEOUT_SECONDS * 1000
+      stalledForMs >= STUCK_DETECTOR_TIMEOUT_SECONDS * 1000
     ) {
       await collectAndFail(
         `Verification stuck: no progress for ${formatDuration(stalledForMs)} ` +
