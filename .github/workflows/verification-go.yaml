@@ -22,6 +22,14 @@ on:
         required: false
         default: "restate=info"
         type: string
+      scenario:
+        type: choice
+        description: "Which verification scenario to run"
+        options:
+          - perf
+          - correctness
+          - vqueues
+        default: "perf"
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily
 
@@ -53,10 +61,10 @@ jobs:
           DRIVER_IMAGE: ${{ inputs.driverImage || 'ghcr.io/restatedev/e2e-verification-runner:main' }}
           RESTATE_CONTAINER_IMAGE: ${{ inputs.restateContainerImage || 'ghcr.io/restatedev/restate:main' }}
           SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage || 'ghcr.io/restatedev/test-services-go:main' }}
-          # Run the go verification test with the perf settings which runs a heavier workload and therefore longer.
+          # Run the go verification test with the perf settings by default which runs a heavier workload and therefore longer.
           # This helps discovering memory leaks and bugs in the go SDK.
-          ENV_FILE: "perf/env.json"
-          PARAMS_FILE: "perf/params.json"
+          ENV_FILE: "${{ inputs.scenario || 'perf' }}/env.json"
+          PARAMS_FILE: "${{ inputs.scenario || 'perf' }}/params.json"
           RESTATE_LOG_FILTER: ${{ inputs.restateLogFilter || 'restate=info' }}
           # Go services: capture goroutine dumps from the SDK containers on a stuck run.
           STUCK_DETECTOR_DUMP_GOROUTINES: "true"
