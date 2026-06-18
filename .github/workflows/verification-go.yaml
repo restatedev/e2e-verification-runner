@@ -22,6 +22,9 @@ on:
         required: false
         default: "restate=info"
         type: string
+      # Go intentionally defaults to the perf scenario: its longer, heavier profile is
+      # meant to surface memory leaks in the Go SDK that the shorter correctness run
+      # misses.
       scenario:
         type: choice
         description: "Which verification scenario to run"
@@ -29,6 +32,7 @@ on:
           - perf
           - correctness
           - vqueues
+          - s3metastore
         default: "perf"
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily

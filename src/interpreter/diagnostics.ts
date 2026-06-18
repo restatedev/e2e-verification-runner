@@ -177,8 +177,6 @@ async function dumpDifferingKeys(
       );
       console.log("invocations:", JSON.stringify(data, null, 2));
     });
-    // Journals are dumped for all non-completed invocations (see
-    // collectDiagnostics), not per differing key.
   }
 }
 

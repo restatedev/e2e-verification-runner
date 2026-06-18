@@ -1,6 +1,13 @@
 name: Verification tests - Java
 
 on:
+  workflow_call: # so scenario-specific scheduled workflows can reuse this one
+    inputs:
+      scenario:
+        description: "Which verification scenario to run"
+        required: false
+        default: "correctness"
+        type: string
   workflow_dispatch: # To start from UI
     inputs:
       driverImage:
@@ -29,6 +36,7 @@ on:
           - correctness
           - perf
           - vqueues
+          - s3metastore
         default: "correctness"
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily

@@ -1,79 +1,14 @@
 name: Verification tests with vqueues - Node
 
 on:
-  workflow_dispatch: # To start from UI
-    inputs:
-      driverImage:
-        description: "e2e-verification-runner (test driver) image"
-        required: false
-        default: "ghcr.io/restatedev/e2e-verification-runner:main"
-        type: string
-      restateContainerImage:
-        description: "The restate container image"
-        required: true
-        default: "ghcr.io/restatedev/restate:main"
-      sdkImage:
-        description: "sdk image, will use 'ghcr.io/restatedev/test-services-node:main' when unspecified"
-        required: false
-        default: "ghcr.io/restatedev/test-services-node:main"
-        type: string
-      restateLogFilter:
-        description: "RESTATE_LOG_FILTER for the runtime nodes (e.g. restate=info)"
-        required: false
-        default: "restate=info"
-        type: string
+  workflow_dispatch:
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily
 
-env:
-  REPOSITORY_OWNER: ${{ github.repository_owner }}
-  GHCR_REGISTRY: "ghcr.io"
-  GHCR_REGISTRY_USERNAME: ${{ github.actor }}
-  GHCR_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 jobs:
-  build:
-    # prevent running on forks
-    if: github.repository_owner == 'restatedev'
-    runs-on: warp-ubuntu-latest-x64-16x # warpbuild runner
-    timeout-minutes: 250
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Log into GitHub container registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.GHCR_REGISTRY }}
-          username: ${{ env.GHCR_REGISTRY_USERNAME }}
-          password: ${{ env.GHCR_REGISTRY_TOKEN }}
-
-      - name: Run the verification test with vqueues
-        env:
-          DRIVER_IMAGE: ${{ inputs.driverImage || 'ghcr.io/restatedev/e2e-verification-runner:main' }}
-          RESTATE_CONTAINER_IMAGE: ${{ inputs.restateContainerImage || 'ghcr.io/restatedev/restate:main' }}
-          SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage || 'ghcr.io/restatedev/test-services-node:main' }}
-          ENV_FILE: "vqueues/env.json"
-          PARAMS_FILE: "vqueues/params.json"
-          RESTATE_LOG_FILTER: ${{ inputs.restateLogFilter || 'restate=info' }}
-          # Capture the runtime nodes' restate-data dirs (RocksDB/metadata) on a stuck run.
-          STUCK_DETECTOR_DUMP_DATA: "true"
-        run: ./scripts/run-verification.sh
-
-      - name: Upload verification log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: verification-node-vqueues-log
-          path: logs/
-          retention-days: 14
-
-      - name: Upload restate-data
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: verification-node-vqueues-restate-data
-          path: restate-data/
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 0
+  verification-node-vqueues:
+    name: Verification tests with vqueues - Node
+    uses: ./.github/workflows/verification-node.yaml
+    secrets: inherit
+    with:
+      scenario: vqueues

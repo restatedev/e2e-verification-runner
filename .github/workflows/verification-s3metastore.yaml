@@ -1,52 +1,14 @@
 name: Verification Metastore tests
 
 on:
-  workflow_dispatch: # To start from UI
-    inputs:
-      restateLogFilter:
-        description: "RESTATE_LOG_FILTER for the runtime nodes (e.g. restate=info)"
-        required: false
-        default: "restate=info"
-        type: string
+  workflow_dispatch:
   schedule:
     - cron: "12 0 * * *" # 00:12am UTC daily
 
-env:
-  REPOSITORY_OWNER: ${{ github.repository_owner }}
-  GHCR_REGISTRY: "ghcr.io"
-  GHCR_REGISTRY_USERNAME: ${{ github.actor }}
-  GHCR_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 jobs:
-  build:
-    # prevent running on forks
-    if: github.repository_owner == 'restatedev'
-    runs-on: warp-ubuntu-latest-x64-16x # warpbuild runner
-    timeout-minutes: 250
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Log into GitHub container registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.GHCR_REGISTRY }}
-          username: ${{ env.GHCR_REGISTRY_USERNAME }}
-          password: ${{ env.GHCR_REGISTRY_TOKEN }}
-
-      - name: Run the verification test
-        env:
-          RESTATE_CONTAINER_IMAGE: "ghcr.io/restatedev/restate:main"
-          SERVICES_CONTAINER_IMAGE: "ghcr.io/restatedev/test-services-node:main"
-          ENV_FILE: "s3metastore/env.json"
-          PARAMS_FILE: "s3metastore/params.json"
-          RESTATE_LOG_FILTER: ${{ inputs.restateLogFilter || 'restate=info' }}
-        run: ./scripts/run-verification.sh
-
-      - name: Upload verification log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: verification-s3metastore-log
-          path: logs/
-          retention-days: 14
+  verification-s3metastore:
+    name: Verification Metastore tests
+    uses: ./.github/workflows/verification-node.yaml
+    secrets: inherit
+    with:
+      scenario: s3metastore
