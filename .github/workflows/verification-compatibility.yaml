@@ -13,6 +13,10 @@ on:
         description: "compatibility test mode (forward: from old to new version, backward: from new to old version, random: back and forth between versions)"
         required: false
         default: "forward"
+      releasedImage:
+        description: "released restate image to use as the compatibility base (upgraded to/from ghcr.io/restatedev/restate:main)"
+        required: true
+        type: string
       restateLogFilter:
         description: "RESTATE_LOG_FILTER for the runtime nodes (e.g. restate=info)"
         required: false
@@ -32,6 +36,11 @@ on:
           - forward
           - backward
           - random
+      releasedImage:
+        description: "released restate image to use as the compatibility base (upgraded to/from ghcr.io/restatedev/restate:main)"
+        required: false
+        default: "restatedev/restate:1.6.2"
+        type: string
       restateLogFilter:
         description: "RESTATE_LOG_FILTER for the runtime nodes (e.g. restate=info)"
         required: false
@@ -46,7 +55,7 @@ env:
 
 jobs:
   build:
-    name: Compatibility tests (${{ inputs.mode || 'forward' }})
+    name: Compatibility tests (${{ inputs.mode }}, ${{ inputs.releasedImage }} <-> main)
     # prevent running on forks
     if: github.repository_owner == 'restatedev'
     runs-on: warp-ubuntu-latest-x64-16x # warpbuild runner
@@ -65,10 +74,11 @@ jobs:
       - name: Run the verification test
         env:
           RESTATE_CONTAINER_IMAGE: "ghcr.io/restatedev/restate:main"
-          SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage || 'ghcr.io/restatedev/test-services-node:main' }}
+          RESTATE_RELEASED_CONTAINER_IMAGE: ${{ inputs.releasedImage }}
+          SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage }}
           ENV_FILE: "compatibility/env.json"
           PARAMS_FILE: "compatibility/params.json"
-          MODE: ${{ inputs.mode || 'forward' }}
+          MODE: ${{ inputs.mode }}
           RESTATE_LOG_FILTER: ${{ inputs.restateLogFilter || 'restate=info' }}
         run: ./scripts/run-verification.sh
 
