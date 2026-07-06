@@ -8,7 +8,15 @@ on:
 jobs:
   verification-compatibility-forward:
     name: Verification Compatibility Forward
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each released image below is run as a compatibility base against restate:main.
+        releasedImage:
+          - restatedev/restate:1.6.2
+          - restatedev/restate:1.7.0
     uses: ./.github/workflows/verification-compatibility.yaml
     secrets: inherit
     with:
       mode: forward
+      releasedImage: ${{ matrix.releasedImage }}
