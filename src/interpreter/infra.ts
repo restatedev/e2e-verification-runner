@@ -17,8 +17,15 @@ import {
   StartedNetwork,
   StartedTestContainer,
 } from "testcontainers";
+import { KafkaContainer } from "@testcontainers/kafka";
 import { Readable } from "stream";
 import { TestConfigurationRollingUpgrade } from "./test_driver";
+
+// The host-exposed PLAINTEXT port of the @testcontainers/kafka KafkaContainer.
+// Host clients (the driver runs with --net host) reach the broker at
+// getHost():getMappedPort(KAFKA_HOST_PORT); in-network clients use the
+// BROKER listener at <alias>:9092 (see the kafka branch in start()).
+const KAFKA_HOST_PORT = 9093;
 
 /**
  * Reads a (potentially following) log stream for at most `windowMs` milliseconds
@@ -79,6 +86,11 @@ export type ContainerSpec = {
   entryPoint?: string[];
   // mount the following volumes (always rw mode)
   mount?: { source: string; target: string }[];
+  // the kind of container to start. "generic" (default) starts a plain
+  // GenericContainer. "kafka" starts a KafkaContainer (KRaft/zookeeper +
+  // advertised-listener handling); its host bootstrap address is obtained via
+  // Cluster.hostBootstrapServers(name).
+  kind?: "generic" | "kafka";
 };
 
 export type Container = {
@@ -111,6 +123,9 @@ export type Cluster = {
   containerNames(): string[];
   hostContainerUrl(name: string, port: number): string;
   internalContainerUrl(name: string, port: number): string;
+  // "host:port" bootstrap address of a kind:"kafka" container, reachable from
+  // the host (the driver). In-network clients should instead use "<name>:9092".
+  hostBootstrapServers(name: string): string;
 };
 
 export function createCluster(spec: ClusterSpec): Cluster {
@@ -335,6 +350,17 @@ class ConfiguredCluster implements Cluster {
     return `http://${container.host()}:${port}`;
   }
 
+  hostBootstrapServers(name: string): string {
+    if (this.containers === undefined) {
+      throw new Error("Cluster not started");
+    }
+    const container = this.containers.get(name);
+    if (!container) {
+      throw new Error(`Container ${name} not found`);
+    }
+    return `${container.host()}:${container.port(KAFKA_HOST_PORT)}`;
+  }
+
   async start(rollingUpgrade: TestConfigurationRollingUpgrade): Promise<void> {
     const network = await new Network().start();
 
@@ -362,57 +388,54 @@ class ConfiguredCluster implements Cluster {
         }
       });
 
-      const container = new GenericContainer(image)
-        .withExposedPorts(...ports)
-        .withNetwork(network)
-        .withNetworkAliases(spec.name)
-        .withName(spec.name)
-        .withPullPolicy(
-          spec.pull === "always" ? PullPolicy.alwaysPull() : neverPoll,
-        )
-        .withEnvironment(spec.env ?? {});
+      const pullPolicy =
+        spec.pull === "always" ? PullPolicy.alwaysPull() : neverPoll;
 
-      if (spec.cmd) {
-        container.withCommand(spec.cmd);
-      }
-      if (spec.entryPoint) {
-        container.withEntrypoint(spec.entryPoint);
-      }
-      if (spec.mount) {
-        container.withBindMounts(
-          spec.mount.map((m) => {
-            return { source: m.source, target: m.target, mode: "rw" };
-          }),
-        );
-      }
-
-      const restContainers: [string, GenericContainer][] = images.map(
-        (image) => {
-          const restContainer = new GenericContainer(image)
-            .withExposedPorts(...ports)
+      const buildContainer = (image: string): GenericContainer => {
+        if (spec.kind === "kafka") {
+          // KafkaContainer owns its exposed port (KAFKA_HOST_PORT) and the
+          // advertised-listener rewrite. We pin the container hostname to the
+          // network alias so the in-network BROKER listener advertises
+          // "<alias>:9092" (resolvable by other containers) rather than the
+          // random container id.
+          return new KafkaContainer(image)
             .withNetwork(network)
             .withNetworkAliases(spec.name)
             .withName(spec.name)
-            .withPullPolicy(
-              spec.pull === "always" ? PullPolicy.alwaysPull() : neverPoll,
-            )
+            .withHostname(spec.name)
+            .withPullPolicy(pullPolicy)
             .withEnvironment(spec.env ?? {});
+        }
 
-          if (spec.cmd) {
-            restContainer.withCommand(spec.cmd);
-          }
-          if (spec.entryPoint) {
-            restContainer.withEntrypoint(spec.entryPoint);
-          }
-          if (spec.mount) {
-            restContainer.withBindMounts(
-              spec.mount.map((m) => {
-                return { source: m.source, target: m.target, mode: "rw" };
-              }),
-            );
-          }
+        const c = new GenericContainer(image)
+          .withExposedPorts(...ports)
+          .withNetwork(network)
+          .withNetworkAliases(spec.name)
+          .withName(spec.name)
+          .withPullPolicy(pullPolicy)
+          .withEnvironment(spec.env ?? {});
 
-          return [image, restContainer];
+        if (spec.cmd) {
+          c.withCommand(spec.cmd);
+        }
+        if (spec.entryPoint) {
+          c.withEntrypoint(spec.entryPoint);
+        }
+        if (spec.mount) {
+          c.withBindMounts(
+            spec.mount.map((m) => {
+              return { source: m.source, target: m.target, mode: "rw" };
+            }),
+          );
+        }
+        return c;
+      };
+
+      const container = buildContainer(image);
+
+      const restContainers: [string, GenericContainer][] = images.map(
+        (image) => {
+          return [image, buildContainer(image)];
         },
       );
 
