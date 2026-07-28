@@ -9,11 +9,12 @@
     "lint": "eslint --ignore-path .eslintignore --ext .ts src",
     "format": "prettier --ignore-path .eslintignore --write \"src/**/*.+(js|ts|json)\"",
     "app": "node ./dist/app.js"
-
   },
   "author": "Restate developers",
   "dependencies": {
     "@restatedev/restate-sdk-clients": "dev",
+    "@testcontainers/kafka": "^10.28.0",
+    "kafkajs": "^2.2.4",
     "testcontainers": "^10.9.0"
   },
   "devDependencies": {

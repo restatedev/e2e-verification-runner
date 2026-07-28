@@ -19,6 +19,7 @@ import {
   getInvocationStatusCounts,
   sendInterpreter,
 } from "./raw_client";
+import { createInterpreterProducer } from "./kafka_client";
 import { collectDiagnostics, DifferingKey } from "./diagnostics";
 
 // A paused invocation never self-resolves (it waits for a manual resume), so
@@ -80,7 +81,8 @@ const STUCK_DETECTOR_DUMP_GOROUTINES =
 // Capture each runtime node's /restate-data dir on a wedged run. Off by default
 // (the dirs can be large and it gracefully stops the nodes); enable in CI
 // workflows that want the on-disk RocksDB/metadata state for post-mortem.
-const STUCK_DETECTOR_DUMP_DATA = process.env.STUCK_DETECTOR_DUMP_DATA === "true";
+const STUCK_DETECTOR_DUMP_DATA =
+  process.env.STUCK_DETECTOR_DUMP_DATA === "true";
 
 export interface TestConfigurationDeployments {
   adminUrl: string;
@@ -109,6 +111,16 @@ export interface TestConfiguration {
   ///    definition must contain a list of ordered images.
   //     see: ContainerSpec.images in infra.ts
   readonly rollingUpgrade?: TestConfigurationRollingUpgrade;
+  // When set (and running a bootstrapped cluster), the driver submits programs
+  // by producing them to a Kafka topic instead of calling the HTTP ingress. An
+  // `ingress-integration-kafka` container in the cluster consumes the topic and
+  // relays each record into Restate via the gRPC IntegrationSvc. `broker` is the
+  // cluster container name of the kind:"kafka" broker.
+  readonly kafka?: {
+    broker: string;
+    topic: string;
+    partitions: number;
+  };
 }
 
 export enum TestStatus {
@@ -421,6 +433,34 @@ export class Test {
 
     killRestate().catch(console.error);
 
+    if (this.conf.kafka && this.containers) {
+      await this.sendViaKafka(this.conf.kafka, this.containers);
+    } else {
+      await this.sendViaIngress(ingressUrls);
+    }
+
+    this.status = TestStatus.VALIDATING;
+    console.log("Done generating");
+
+    const expected = this.stateTracker.getStates();
+    const numInterpreters = this.conf.keys;
+    const expectedTotal = expected.reduce((acc, layer) => {
+      return acc + layer.reduce((acc, v) => acc + v, 0);
+    }, 0);
+
+    return verify({
+      numInterpreters,
+      adminUrl,
+      expectedTotal,
+      expected,
+      cluster: this.containers,
+    });
+  }
+
+  // Submit programs over the Restate HTTP ingress: one POST per program to
+  // /ObjectInterpreterL0/{id}/interpret/send, round-robin across ingress URLs,
+  // deduplicated by a monotonic idempotency key.
+  private async sendViaIngress(ingressUrls: URL[]) {
     let idempotencyKey = 1;
     for (const b of batch(this.generate(), 256)) {
       const promises = b.map(({ id, program }) => {
@@ -451,23 +491,49 @@ export class Test {
         throw e;
       }
     }
+  }
 
-    this.status = TestStatus.VALIDATING;
-    console.log("Done generating");
-
-    const expected = this.stateTracker.getStates();
-    const numInterpreters = this.conf.keys;
-    const expectedTotal = expected.reduce((acc, layer) => {
-      return acc + layer.reduce((acc, v) => acc + v, 0);
-    }, 0);
-
-    return verify({
-      numInterpreters,
-      adminUrl,
-      expectedTotal,
-      expected,
-      cluster: this.containers,
+  // Submit programs by producing them to a Kafka topic. An
+  // `ingress-integration-kafka` container consumes the topic and relays each
+  // record into Restate via the gRPC IntegrationSvc. The record key is the
+  // interpreter id (-> virtual-object key) and the value is JSON.stringify(program)
+  // (-> invocation payload). The local expectation (stateTracker.update) is
+  // recorded identically to the ingress path, so verification is unchanged.
+  private async sendViaKafka(
+    kafka: NonNullable<TestConfiguration["kafka"]>,
+    containers: Cluster,
+  ) {
+    const brokers = [containers.hostBootstrapServers(kafka.broker)];
+    console.log(`Producing to Kafka topic '${kafka.topic}' via ${brokers}`);
+    const producer = await createInterpreterProducer({
+      brokers,
+      topic: kafka.topic,
+      partitions: kafka.partitions,
     });
+    try {
+      for (const b of batch(this.generate(), 256)) {
+        const promises = b.map(({ id, program }) =>
+          retry({
+            op: () => producer.send(`${id}`, program),
+            timeout: 1000,
+            tag: `produce ${id}`,
+          }),
+        );
+
+        b.forEach(({ id, program }) =>
+          this.stateTracker.update(0, id, program),
+        );
+        try {
+          await Promise.all(promises);
+          console.log(`\x1b[33m Produced ${b.length} programs \x1b[0m`);
+        } catch (e) {
+          console.error(e);
+          throw e;
+        }
+      }
+    } finally {
+      await producer.disconnect();
+    }
   }
 
   private async cleanup() {
