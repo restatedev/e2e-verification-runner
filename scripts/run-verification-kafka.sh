@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
 
-# The driver is piped into `tee` at the end so its output is also captured to a
-# file that CI uploads as an artifact (the GitHub run-log archive is too large
-# to download reliably). pipefail makes the script's exit status reflect the
-# driver's exit rather than tee's.
-set -o pipefail
+#
+# Runs the verification suite against a 3-node Restate cluster where the driver
+# submits interpreter programs by producing them to a Kafka topic. An
+# `ingress-integration-kafka` container consumes the topic and relays each record
+# into Restate via the gRPC IntegrationSvc (RESTATE_INGRESS__INTEGRATION__ENABLED).
+#
+# NOTE: RESTATE_CONTAINER_IMAGE must be a build that includes the Integration API
+# (restatedev/restate#5026); otherwise the gRPC IntegrationSvc is UNIMPLEMENTED
+# and no records land. Override it, e.g.:
+#   RESTATE_CONTAINER_IMAGE=ghcr.io/restatedev/restate:<pr-build> ./run-verification-kafka.sh
+#
 
 #
 # input parameters to this script, they all have defaults
 #
-export DRIVER_IMAGE=${DRIVER_IMAGE:-"ghcr.io/restatedev/e2e-verification-runner:main"}
-export RESTATE_CONTAINER_IMAGE=${RESTATE_CONTAINER_IMAGE:-"ghcr.io/restatedev/restate:main"}
-export RESTATE_RELEASED_CONTAINER_IMAGE=${RESTATE_RELEASED_CONTAINER_IMAGE:-"restatedev/restate:1.6.2"}
+export DRIVER_IMAGE=${DRIVER_IMAGE:-"ghcr.io/restatedev/e2e-verification-runner:local"}
+export RESTATE_CONTAINER_IMAGE=${RESTATE_CONTAINER_IMAGE:-"ghcr.io/restatedev/restate:pr5026"}
 export SERVICES_CONTAINER_IMAGE=${SERVICES_CONTAINER_IMAGE:-"ghcr.io/restatedev/test-services-node:main"}
-export ENV_FILE=${ENV_FILE:-"correctness/env.json"}
-export PARAMS_FILE=${PARAMS_FILE:-"correctness/params.json"}
+export KAFKA_IMAGE=${KAFKA_IMAGE:-"confluentinc/cp-kafka:7.5.0"}
+export INTEGRATION_IMAGE=${INTEGRATION_IMAGE:-"ghcr.io/restatedev/ingress-integration-kafka:main"}
+export ENV_FILE=${ENV_FILE:-"kafka/env.json"}
+export PARAMS_FILE=${PARAMS_FILE:-"kafka/params.json"}
 export MODE=${MODE:-"forward"}
 
 
@@ -62,8 +69,9 @@ function fix_path() {
 if [ -z "${NO_PULL}" ]; then
 	docker pull ${DRIVER_IMAGE}
 	docker pull ${RESTATE_CONTAINER_IMAGE}
-	docker pull ${RESTATE_RELEASED_CONTAINER_IMAGE}
 	docker pull ${SERVICES_CONTAINER_IMAGE}
+	docker pull ${KAFKA_IMAGE}
+	docker pull ${INTEGRATION_IMAGE}
 fi
 
 # log configuration parameters
@@ -75,13 +83,15 @@ echo "RESTATE ================================================"
 echo ${RESTATE_CONTAINER_IMAGE}
 docker inspect ${RESTATE_CONTAINER_IMAGE} | grep org.opencontainers.image.revision
 
-echo "RESTATE (released) ========================================="
-echo ${RESTATE_RELEASED_CONTAINER_IMAGE}
-docker inspect ${RESTATE_RELEASED_CONTAINER_IMAGE} | grep org.opencontainers.image.revision
-
 echo "SERVICE ================================================"
 echo ${SERVICES_CONTAINER_IMAGE}
 docker inspect ${SERVICES_CONTAINER_IMAGE} | grep org.opencontainers.image.revision
+
+echo "KAFKA ================================================="
+echo ${KAFKA_IMAGE}
+
+echo "INTEGRATION ==========================================="
+echo ${INTEGRATION_IMAGE}
 
 echo "======================================================="
 
@@ -97,25 +107,13 @@ echo ${PARAMS_FILE}
 export MOUNT_DIR=$(mktemp -d)
 echo "MOUNT_DIR=${MOUNT_DIR}"
 
-# Directory for all logs uploaded as a CI artifact: the driver's own output
-# (verification.log) plus one file per container, written by the driver into the
-# mounted container-logs dir.
-export LOG_DIR=${LOG_DIR:-"$(pwd)/logs"}
-export CONTAINER_LOGS_DIR_HOST="${LOG_DIR}/containers"
-mkdir -p "${CONTAINER_LOGS_DIR_HOST}"
-export VERIFICATION_LOG="${VERIFICATION_LOG:-${LOG_DIR}/verification.log}"
-
-# Separate dir (outside LOG_DIR) for the large restate-data dumps, uploaded as its
-# own CI artifact so the logs can be downloaded without pulling multi-GB RocksDB data.
-export RESTATE_DATA_DUMP_DIR_HOST="${RESTATE_DATA_DUMP_DIR_HOST:-$(pwd)/restate-data}"
-mkdir -p "${RESTATE_DATA_DUMP_DIR_HOST}"
-
 export INTERPRETER_DRIVER_CONF=$(template_json ${PARAMS_FILE})
 export UNIVERSE_ENV_JSON=$(template_json ${ENV_FILE})
 export SERVICES=InterpreterDriverJob
 export NODE_ENV=production
 export NODE_OPTIONS="--max-old-space-size=4096"
 export AWS_LAMBDA_FUNCTION_NAME=1
+export DEBUG=testcontainers:containers
 
 if [ -n "${DISABLE_CLEANUP}" ]; then
 	export TESTCONTAINERS_RYUK_DISABLED=true
@@ -128,17 +126,9 @@ docker run \
 	--env NODE_ENV \
 	--env NODE_OPTIONS \
 	--env AWS_LAMBDA_FUNCTION_NAME \
-	-v "${CONTAINER_LOGS_DIR_HOST}":/container-logs \
-	--env CONTAINER_LOGS_DIR=/container-logs \
-	-v "${RESTATE_DATA_DUMP_DIR_HOST}":/restate-data-dump \
-	--env RESTATE_DATA_DUMP_DIR=/restate-data-dump \
+	--env DEBUG \
 	--env INTERPRETER_DRIVER_CONF \
 	--env UNIVERSE_ENV_JSON \
 	--env DISABLE_CLEANUP \
 	--env TESTCONTAINERS_RYUK_DISABLED \
-	--env STUCK_DETECTOR_DUMP_GOROUTINES \
-	--env STUCK_DETECTOR_DUMP_DATA \
-	--env STUCK_DETECTOR_TIMEOUT_SECONDS \
-	--env STUCK_DETECTOR_DISABLED \
-	--env INTERPRETER_JOURNAL_RETENTION \
-	${DRIVER_IMAGE} 2>&1 | tee "${VERIFICATION_LOG:-verification.log}"
+	${DRIVER_IMAGE}
