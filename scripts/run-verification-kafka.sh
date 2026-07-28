@@ -1,14 +1,27 @@
 #!/usr/bin/env bash
 
 #
+# Runs the verification suite against a 3-node Restate cluster where the driver
+# submits interpreter programs by producing them to a Kafka topic. An
+# `ingress-integration-kafka` container consumes the topic and relays each record
+# into Restate via the gRPC IntegrationSvc (RESTATE_INGRESS__INTEGRATION__ENABLED).
+#
+# NOTE: RESTATE_CONTAINER_IMAGE must be a build that includes the Integration API
+# (restatedev/restate#5026); otherwise the gRPC IntegrationSvc is UNIMPLEMENTED
+# and no records land. Override it, e.g.:
+#   RESTATE_CONTAINER_IMAGE=ghcr.io/restatedev/restate:<pr-build> ./run-verification-kafka.sh
+#
+
+#
 # input parameters to this script, they all have defaults
 #
-export DRIVER_IMAGE=${DRIVER_IMAGE:-"ghcr.io/restatedev/e2e-verification-runner:main"}
-export RESTATE_CONTAINER_IMAGE=${RESTATE_CONTAINER_IMAGE:-"ghcr.io/restatedev/restate:main"}
-export RESTATE_RELEASED_CONTAINER_IMAGE=${RESTATE_RELEASED_CONTAINER_IMAGE:-"restatedev/restate:1.6.2"}
+export DRIVER_IMAGE=${DRIVER_IMAGE:-"ghcr.io/restatedev/e2e-verification-runner:local"}
+export RESTATE_CONTAINER_IMAGE=${RESTATE_CONTAINER_IMAGE:-"ghcr.io/restatedev/restate:pr5026"}
 export SERVICES_CONTAINER_IMAGE=${SERVICES_CONTAINER_IMAGE:-"ghcr.io/restatedev/test-services-node:main"}
-export ENV_FILE=${ENV_FILE:-"correctness/env.json"}
-export PARAMS_FILE=${PARAMS_FILE:-"correctness/params.json"}
+export KAFKA_IMAGE=${KAFKA_IMAGE:-"confluentinc/cp-kafka:7.5.0"}
+export INTEGRATION_IMAGE=${INTEGRATION_IMAGE:-"ghcr.io/restatedev/ingress-integration-kafka:main"}
+export ENV_FILE=${ENV_FILE:-"kafka/env.json"}
+export PARAMS_FILE=${PARAMS_FILE:-"kafka/params.json"}
 export MODE=${MODE:-"forward"}
 
 
@@ -56,8 +69,9 @@ function fix_path() {
 if [ -z "${NO_PULL}" ]; then
 	docker pull ${DRIVER_IMAGE}
 	docker pull ${RESTATE_CONTAINER_IMAGE}
-	docker pull ${RESTATE_RELEASED_CONTAINER_IMAGE}
 	docker pull ${SERVICES_CONTAINER_IMAGE}
+	docker pull ${KAFKA_IMAGE}
+	docker pull ${INTEGRATION_IMAGE}
 fi
 
 # log configuration parameters
@@ -69,13 +83,15 @@ echo "RESTATE ================================================"
 echo ${RESTATE_CONTAINER_IMAGE}
 docker inspect ${RESTATE_CONTAINER_IMAGE} | grep org.opencontainers.image.revision
 
-echo "RESTATE (released) ========================================="
-echo ${RESTATE_RELEASED_CONTAINER_IMAGE}
-docker inspect ${RESTATE_RELEASED_CONTAINER_IMAGE} | grep org.opencontainers.image.revision
-
 echo "SERVICE ================================================"
 echo ${SERVICES_CONTAINER_IMAGE}
 docker inspect ${SERVICES_CONTAINER_IMAGE} | grep org.opencontainers.image.revision
+
+echo "KAFKA ================================================="
+echo ${KAFKA_IMAGE}
+
+echo "INTEGRATION ==========================================="
+echo ${INTEGRATION_IMAGE}
 
 echo "======================================================="
 
