@@ -15,6 +15,7 @@ jobs:
         releasedImage:
           - restatedev/restate:1.6.2
           - restatedev/restate:1.7.0
+          - restatedev/restate:1.7.2
     uses: ./.github/workflows/verification-compatibility.yaml
     secrets: inherit
     with:
