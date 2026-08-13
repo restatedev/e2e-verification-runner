@@ -1,9 +1,10 @@
 {
 	"seed": "${SEED}",
 	"keys": 1000000,
-	"tests": 100000,
+	"tests": 500000,
 	"maxProgramSize": 20,
 	"bootstrap": true,
+	"crashInterval": 300000,
 	"kafka": {
 		"broker": "kafka",
 		"topic": "interpreter",
