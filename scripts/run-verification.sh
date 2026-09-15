@@ -11,7 +11,7 @@ set -o pipefail
 #
 export DRIVER_IMAGE=${DRIVER_IMAGE:-"ghcr.io/restatedev/e2e-verification-runner:main"}
 export RESTATE_CONTAINER_IMAGE=${RESTATE_CONTAINER_IMAGE:-"ghcr.io/restatedev/restate:main"}
-export RESTATE_RELEASED_CONTAINER_IMAGE=${RESTATE_RELEASED_CONTAINER_IMAGE:-"restatedev/restate:1.6.2"}
+export RESTATE_RELEASED_CONTAINER_IMAGE=${RESTATE_RELEASED_CONTAINER_IMAGE:-"restatedev/restate:1.7.2"}
 export SERVICES_CONTAINER_IMAGE=${SERVICES_CONTAINER_IMAGE:-"ghcr.io/restatedev/test-services-node:main"}
 export ENV_FILE=${ENV_FILE:-"correctness/env.json"}
 export PARAMS_FILE=${PARAMS_FILE:-"correctness/params.json"}
