@@ -105,3 +105,8 @@ Configure via environment variables:
   whole run — tune this (and/or `tests` in the params file) for focused hunts.
 
 ## See [`run-verification.sh`](scripts/run-verification.sh)
+
+## Kubernetes chaos verification
+
+See [the Chaos Mesh suite](chaos/README.md) for operator-managed Kubernetes tests
+with repeated faults, bounded recovery, and retained failure diagnostics.
