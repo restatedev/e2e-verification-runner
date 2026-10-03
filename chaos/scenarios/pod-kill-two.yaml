@@ -1,0 +1,22 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: experiment
+  namespace: ${NS}
+spec:
+  # Deliberate quorum loss: leave longer between outages than single-pod kills,
+  # while keeping three scheduling opportunities in the default window.
+  schedule: "@every 100s"
+  concurrencyPolicy: Forbid
+  historyLimit: 10
+  type: PodChaos
+  podChaos:
+    action: pod-kill
+    mode: fixed
+    value: "2"
+    gracePeriod: 0
+    selector:
+      namespaces:
+        - ${NS}
+      labelSelectors:
+        app.kubernetes.io/name: restate
