@@ -1,0 +1,29 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: experiment
+  namespace: ${NS}
+spec:
+  schedule: "@every 60s"
+  concurrencyPolicy: Forbid
+  historyLimit: 10
+  type: NetworkChaos
+  networkChaos:
+    action: partition
+    mode: one
+    duration: 20s
+    direction: both
+    selector:
+      namespaces:
+        - ${NS}
+      labelSelectors:
+        app.kubernetes.io/name: restate
+    # Only Restate-to-Restate traffic, leaving workload and control traffic alone.
+    # A fresh random source is selected for each scheduled experiment.
+    target:
+      mode: all
+      selector:
+        namespaces:
+          - ${NS}
+        labelSelectors:
+          app.kubernetes.io/name: restate

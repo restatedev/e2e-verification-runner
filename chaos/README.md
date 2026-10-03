@@ -29,12 +29,19 @@ it with `kubectl delete restatecluster <namespace>`.
 
 ## Scenarios
 
-| Name           | Fault                                  | Interval |
-| -------------- | -------------------------------------- | -------- |
-| `pod-kill-one` | Kill one randomly selected Restate pod | 60s      |
+| Name                    | Fault                                                       | Interval |
+| ----------------------- | ----------------------------------------------------------- | -------- |
+| `pod-kill-one`          | Kill one randomly selected Restate pod                      | 60s      |
+| `pod-kill-two`          | Kill two pods, deliberately losing quorum                   | 100s     |
+| `pod-failure-one`       | Make one pod unavailable for 20s                            | 60s      |
+| `network-partition-one` | Isolate one random pod from its peers for 20s               | 60s      |
+| `network-delay`         | Add 100ms ±20ms delay between one pod and its peers for 20s | 60s      |
+| `network-loss`          | Drop 10% of packets between one pod and its peers for 20s   | 60s      |
 
 Victims are selected independently each time and may repeat; the saved
-experiment records show the actual sequence. PVCs survive pod kills.
+experiment records show the actual sequence. Network faults affect both
+directions, scoped to Restate pods. PVCs survive pod kills. Delay and loss need
+the host kernel's netem support; without it, injection fails and so does the run.
 
 ## Configuration
 
@@ -72,15 +79,15 @@ completion allowance. Anything else fails with a reason in `result.json` and a
 nonzero exit. Finishing _submission_ during chaos is fine; the Job is only
 rejected if it already succeeded before faults were removed.
 
-The **Kubernetes chaos verification** workflow runs on dispatch, one matrix job
-per scenario, each on its own kind cluster. Every job uploads a
+The **Kubernetes chaos verification** workflow runs nightly and on dispatch,
+one matrix job per scenario, each on its own kind cluster. Every job uploads a
 `chaos-<scenario>` artifact, even on failure, and writes its verdict to the run
 summary:
 
 ```sh
 gh workflow run chaos.yml -R restatedev/e2e-verification-runner \
-  -f scenarios='["pod-kill-one"]' -f restateContainerImage=ghcr.io/restatedev/restate:main
-gh run download <run-id> -R restatedev/e2e-verification-runner -n chaos-pod-kill-one
+  -f scenarios='["network-loss"]' -f restateContainerImage=ghcr.io/restatedev/restate:main
+gh run download <run-id> -R restatedev/e2e-verification-runner -n chaos-network-loss
 ```
 
 Per scenario the output directory holds `result.json`, the rendered
