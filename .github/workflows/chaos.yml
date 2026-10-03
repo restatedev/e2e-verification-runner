@@ -1,0 +1,99 @@
+name: Kubernetes chaos verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      restateContainerImage:
+        description: Restate candidate image (defaults to main)
+        type: string
+      driverImage:
+        description: Verification driver image (defaults to main)
+        type: string
+      sdkImage:
+        description: Node test-services image (defaults to main)
+        type: string
+      operatorChartVersion:
+        description: Operator chart version (defaults to 3.1.0)
+        type: string
+      scenarios:
+        description: JSON list of scenario names (defaults to pod-kill-one)
+        type: string
+      seed:
+        description: Workload seed (defaults to the Actions run ID)
+        type: string
+      driverTests:
+        description: Program count; increase if verification finishes during chaos
+        type: number
+        default: 400000
+
+permissions:
+  contents: read
+
+jobs:
+  chaos:
+    if: github.repository_owner == 'restatedev'
+    runs-on: warp-ubuntu-latest-x64-8x
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ${{ fromJSON(inputs.scenarios || '["pod-kill-one"]') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
+        with:
+          version: v3.19.0
+      - name: Install kind
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          version: v0.32.0
+          install_only: true
+          ignore_failed_clean: true
+      - name: Build and check the harness
+        run: |
+          npm install
+          npm run test:chaos
+          npx prettier --check 'src/chaos/**/*.ts' 'chaos/**/*.yaml' chaos/README.md .github/workflows/chaos.yml
+      - name: Create a kind cluster with Chaos Mesh and the operator
+        env:
+          OPERATOR_CHART_VERSION: ${{ inputs.operatorChartVersion || '3.1.0' }}
+        run: scripts/chaos-env.sh
+      - name: Run chaos verification
+        env:
+          RESTATE_CONTAINER_IMAGE: ${{ inputs.restateContainerImage || 'ghcr.io/restatedev/restate:main' }}
+          SERVICES_CONTAINER_IMAGE: ${{ inputs.sdkImage || 'ghcr.io/restatedev/test-services-node:main' }}
+          DRIVER_IMAGE: ${{ inputs.driverImage || 'ghcr.io/restatedev/e2e-verification-runner:main' }}
+          SCENARIOS: ${{ matrix.scenario }}
+          SEED: ${{ inputs.seed || github.run_id }}
+          DRIVER_TESTS: ${{ inputs.driverTests || 400000 }}
+          OUT: chaos/out
+        # Bounded below the job timeout so diagnostics still get uploaded.
+        run: timeout --signal=TERM --kill-after=1m 45m npm run chaos
+      - name: Collect kind node logs
+        if: always()
+        run: kind export logs chaos/out/kind --name restate-chaos
+      - name: Upload chaos diagnostics
+        id: artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: chaos-${{ matrix.scenario }}
+          path: chaos/out/
+          retention-days: 14
+          compression-level: 3
+          if-no-files-found: warn
+      - name: Publish summary and download link
+        if: always()
+        env:
+          ARTIFACT_URL: ${{ steps.artifacts.outputs.artifact-url }}
+        run: |
+          {
+            echo "### ${{ matrix.scenario }}"
+            for result in chaos/out/*/result.json; do
+              [[ -f "$result" ]] && jq -r '"\(.verdict) after \(.injections | length) injections" + (if .reasons | length > 0 then ": " + (.reasons | join("; ")) else "" end)' "$result"
+            done
+            [[ -n "$ARTIFACT_URL" ]] && echo "[Download diagnostics]($ARTIFACT_URL)"
+          } >> "$GITHUB_STEP_SUMMARY"
