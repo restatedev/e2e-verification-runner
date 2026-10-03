@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-services
+  namespace: ${NS}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-services
+  template:
+    metadata:
+      labels:
+        app: test-services
+        allow.restate.dev/${NS}: "true"
+    spec:
+      containers:
+        - name: services
+          image: ${SERVICES_CONTAINER_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "9080"
+            - name: SERVICES
+              value: ObjectInterpreterL0,ObjectInterpreterL1,ObjectInterpreterL2,ServiceInterpreterHelper
+          ports:
+            - containerPort: 9080
+          readinessProbe:
+            tcpSocket:
+              port: 9080
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-services
+  namespace: ${NS}
+spec:
+  selector:
+    app: test-services
+  ports:
+    - port: 9080
+      targetPort: 9080

@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chaos-driver
+  namespace: ${NS}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: ${JOB_DEADLINE_SECONDS}
+  template:
+    metadata:
+      labels:
+        app: chaos-driver
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: driver
+          image: ${DRIVER_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SERVICES
+              value: InterpreterDriverJob
+            - name: UNIVERSE_ENV_JSON
+              value: "{}"
+            - name: INTERPRETER_DRIVER_CONF
+              value: ${DRIVER_CONF}
+            # Half the completion allowance: long enough to ride out any single
+            # fault window, short enough to dump invocation diagnostics before
+            # the Job deadline kills a wedged verification.
+            - name: STUCK_DETECTOR_TIMEOUT_SECONDS
+              value: "${STUCK_DETECTOR_SECONDS}"
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=1536
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              memory: 2Gi

@@ -8,14 +8,18 @@
     "build": "tsc --noEmitOnError",
     "lint": "eslint --ignore-path .eslintignore --ext .ts src",
     "format": "prettier --ignore-path .eslintignore --write \"src/**/*.+(js|ts|json)\"",
-    "app": "node ./dist/app.js"
+    "app": "node ./dist/app.js",
+    "chaos": "node ./dist/chaos/run.js",
+    "test:chaos": "npm run build && node --test dist/chaos/*.test.js"
   },
   "author": "Restate developers",
   "dependencies": {
     "@restatedev/restate-sdk-clients": "dev",
     "@testcontainers/kafka": "^10.28.0",
+    "execa": "^10.0.1",
     "kafkajs": "^2.2.4",
-    "testcontainers": "^10.9.0"
+    "testcontainers": "^10.9.0",
+    "yaml": "^2.8.1"
   },
   "devDependencies": {
     "eslint": "^9.11.1",
