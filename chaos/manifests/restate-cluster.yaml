@@ -1,0 +1,46 @@
+apiVersion: restate.dev/v1
+kind: RestateCluster
+metadata:
+  name: ${NS}
+spec:
+  cluster:
+    autoProvision: true
+  compute:
+    replicas: 3
+    image: ${RESTATE_CONTAINER_IMAGE}
+    imagePullPolicy: IfNotPresent
+    # Sized for an 8 vCPU / 32 GB runner; requests also fit a 12 GB local Docker.
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        memory: 3Gi
+  # Each pod gets its own PersistentVolumeClaim from the operator's StatefulSet,
+  # so node data survives pod kills (a local-path volume on kind).
+  storage:
+    storageRequestBytes: 4294967296
+  security:
+    networkPeers:
+      ingress:
+        - podSelector:
+            matchLabels:
+              app: chaos-driver
+      admin:
+        - podSelector:
+            matchLabels:
+              app: chaos-driver
+  # Follows the operator README's three-node Raft example; all roles run on
+  # every node by default.
+  config: |
+    auto-provision = false
+    default-num-partitions = 8
+    default-replication = 2
+    # Half the memory request, within the operator's 20-50% guidance.
+    rocksdb-total-memory-size = "1 GiB"
+
+    [metadata-client]
+    addresses = ["http://restate-cluster:5122/"]
+
+    [worker.invoker]
+    inactivity-timeout = "1s"
