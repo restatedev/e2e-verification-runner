@@ -1,0 +1,19 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: experiment
+  namespace: ${NS}
+spec:
+  schedule: "@every 60s"
+  concurrencyPolicy: Forbid
+  historyLimit: 10
+  type: PodChaos
+  podChaos:
+    action: pod-failure
+    mode: one
+    duration: 20s
+    selector:
+      namespaces:
+        - ${NS}
+      labelSelectors:
+        app.kubernetes.io/name: restate

@@ -1,0 +1,30 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: experiment
+  namespace: ${NS}
+spec:
+  schedule: "@every 60s"
+  concurrencyPolicy: Forbid
+  historyLimit: 10
+  type: NetworkChaos
+  networkChaos:
+    action: delay
+    mode: one
+    duration: 20s
+    direction: both
+    delay:
+      latency: 100ms
+      jitter: 20ms
+    selector:
+      namespaces:
+        - ${NS}
+      labelSelectors:
+        app.kubernetes.io/name: restate
+    target:
+      mode: all
+      selector:
+        namespaces:
+          - ${NS}
+        labelSelectors:
+          app.kubernetes.io/name: restate
