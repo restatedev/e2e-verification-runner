@@ -72,11 +72,22 @@ completion allowance. Anything else fails with a reason in `result.json` and a
 nonzero exit. Finishing _submission_ during chaos is fine; the Job is only
 rejected if it already succeeded before faults were removed.
 
+The **Kubernetes chaos verification** workflow runs on dispatch, one matrix job
+per scenario, each on its own kind cluster. Every job uploads a
+`chaos-<scenario>` artifact, even on failure, and writes its verdict to the run
+summary:
+
+```sh
+gh workflow run chaos.yml -R restatedev/e2e-verification-runner \
+  -f scenarios='["pod-kill-one"]' -f restateContainerImage=ghcr.io/restatedev/restate:main
+gh run download <run-id> -R restatedev/e2e-verification-runner -n chaos-pod-kill-one
+```
+
 Per scenario the output directory holds `result.json`, the rendered
 `manifests/`, `chaos/` experiment records as last observed, `logs/` with one
 file per pod incarnation and container for the workload, operator, and Chaos
 Mesh namespaces, plus resource YAML, events, descriptions, and `restatectl
-status` before and after.
+status` before and after. In Actions, `kind/` adds the node logs.
 
 ## Add a scenario
 
