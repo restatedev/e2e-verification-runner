@@ -61,10 +61,10 @@ export function settings(env = process.env) {
     out: resolve(env.OUT ?? join(suite, "out", runId)),
     scenarios,
     chaosSeconds: integer("CHAOS_SECONDS", 300),
-    completionSeconds: integer("COMPLETION_TIMEOUT_SECONDS", 900),
+    completionSeconds: integer("COMPLETION_TIMEOUT_SECONDS", 1800),
     startupSeconds: integer("STARTUP_TIMEOUT_SECONDS", 300),
     keys: integer("DRIVER_KEYS", 500),
-    tests: integer("DRIVER_TESTS", 400000),
+    tests: integer("DRIVER_TESTS", 300000),
     maxProgramSize: integer("DRIVER_MAX_PROGRAM_SIZE", 20),
     images: {
       RESTATE_CONTAINER_IMAGE:

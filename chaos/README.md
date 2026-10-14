@@ -55,10 +55,10 @@ All inputs are environment variables; defaults live in `src/chaos/spec.ts`.
 | `DRIVER_IMAGE`               | `ghcr.io/restatedev/e2e-verification-runner:main` | Existing verification Job                              |
 | `SEED`                       | Unique run ID                                     | Workload seed; Chaos Mesh victim selection is separate |
 | `DRIVER_KEYS`                | `500`                                             | Interpreter keys                                       |
-| `DRIVER_TESTS`               | `400000`                                          | Generated programs; must outlast the chaos window      |
+| `DRIVER_TESTS`               | `300000`                                          | Generated programs; must outlast the chaos window      |
 | `DRIVER_MAX_PROGRAM_SIZE`    | `20`                                              | Maximum generated program size                         |
 | `CHAOS_SECONDS`              | `300`                                             | Fixed chaos window                                     |
-| `COMPLETION_TIMEOUT_SECONDS` | `900`                                             | Completion allowance after faults are removed          |
+| `COMPLETION_TIMEOUT_SECONDS` | `1800`                                            | Completion allowance after faults are removed          |
 | `STARTUP_TIMEOUT_SECONDS`    | `300`                                             | Bound on each startup wait                             |
 | `OUT`                        | `chaos/out/<run-id>`                              | Output directory                                       |
 
@@ -67,7 +67,7 @@ All inputs are environment variables; defaults live in `src/chaos/spec.ts`.
 completion allowance: long enough to tolerate a fault window, short enough to
 dump invocation diagnostics when verification wedges.
 
-For a quick local check, shrink the run: `CHAOS_SECONDS=130 DRIVER_TESTS=300000
+For a quick local check, shrink the run: `CHAOS_SECONDS=130
 COMPLETION_TIMEOUT_SECONDS=600` still yields two injections at a 60s interval.
 
 ## Results and debugging

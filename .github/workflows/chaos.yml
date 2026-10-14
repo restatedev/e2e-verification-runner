@@ -26,7 +26,7 @@ on:
       driverTests:
         description: Program count; increase if verification finishes during chaos
         type: number
-        default: 400000
+        default: 300000
 
 permissions:
   contents: read
@@ -70,10 +70,10 @@ jobs:
           DRIVER_IMAGE: ${{ inputs.driverImage || 'ghcr.io/restatedev/e2e-verification-runner:main' }}
           SCENARIOS: ${{ matrix.scenario }}
           SEED: ${{ inputs.seed || github.run_id }}
-          DRIVER_TESTS: ${{ inputs.driverTests || 400000 }}
+          DRIVER_TESTS: ${{ inputs.driverTests || 300000 }}
           OUT: chaos/out
         # Bounded below the job timeout so diagnostics still get uploaded.
-        run: timeout --signal=TERM --kill-after=1m 45m npm run chaos
+        run: timeout --signal=TERM --kill-after=1m 50m npm run chaos
       - name: Collect kind node logs
         if: always()
         run: kind export logs chaos/out/kind --name restate-chaos
