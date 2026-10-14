@@ -15,7 +15,7 @@ on:
         description: Node test-services image (defaults to main)
         type: string
       operatorChartVersion:
-        description: Operator chart version (defaults to 3.1.0)
+        description: Operator chart version (defaults to the latest release)
         type: string
       scenarios:
         description: JSON list of scenario names (defaults to all)
@@ -61,8 +61,12 @@ jobs:
           npx prettier --check 'src/chaos/**/*.ts' 'chaos/**/*.yaml' chaos/README.md .github/workflows/chaos.yml
       - name: Create a kind cluster with Chaos Mesh and the operator
         env:
-          OPERATOR_CHART_VERSION: ${{ inputs.operatorChartVersion || '3.1.0' }}
-        run: scripts/chaos-env.sh
+          OPERATOR_CHART_VERSION: ${{ inputs.operatorChartVersion }}
+        # Record the resolved chart so a failure can be rerun against it.
+        run: |
+          scripts/chaos-env.sh
+          mkdir -p chaos/out
+          helm get metadata restate-operator --namespace restate-operator > chaos/out/operator.txt
       - name: Run chaos verification
         env:
           RESTATE_CONTAINER_IMAGE: ${{ inputs.restateContainerImage || 'ghcr.io/restatedev/restate:main' }}
@@ -94,6 +98,7 @@ jobs:
         run: |
           {
             echo "### ${{ matrix.scenario }}"
+            [[ -f chaos/out/operator.txt ]] && awk '$1 == "VERSION:" { print "Operator chart " $2 }' chaos/out/operator.txt
             for result in chaos/out/*/result.json; do
               [[ -f "$result" ]] && jq -r '"\(.verdict) after \(.injections | length) injections" + (if .reasons | length > 0 then ": " + (.reasons | join("; ")) else "" end)' "$result"
             done

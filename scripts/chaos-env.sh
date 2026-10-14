@@ -6,7 +6,8 @@ set -euo pipefail
 CLUSTER=${KIND_CLUSTER:-restate-chaos}
 KIND_IMAGE=${KIND_IMAGE:-"kindest/node:v1.35.5@sha256:ce977ae6d65918d0b58a5f8b5e940429c2ce42fa3a5619ec2bbc60b949c0ac95"}
 CHAOS_MESH_VERSION=${CHAOS_MESH_VERSION:-2.8.3}
-OPERATOR_CHART_VERSION=${OPERATOR_CHART_VERSION:-3.1.0}
+# Empty installs the latest published operator chart.
+OPERATOR_CHART_VERSION=${OPERATOR_CHART_VERSION:-}
 
 if ! kind get clusters 2>/dev/null | grep -qx "${CLUSTER}"; then
 	kind create cluster --name "${CLUSTER}" --image "${KIND_IMAGE}" --wait 120s
@@ -23,6 +24,8 @@ helm upgrade --install chaos-mesh chaos-mesh \
 helm upgrade --install restate-operator oci://ghcr.io/restatedev/restate-operator-helm \
 	--version "${OPERATOR_CHART_VERSION}" \
 	--namespace restate-operator --create-namespace --wait --timeout 180s
+OPERATOR_CHART_VERSION=$(helm get metadata restate-operator --namespace restate-operator |
+	awk '$1 == "VERSION:" { print $2 }')
 
 echo "Ready: kind cluster ${CLUSTER} with Chaos Mesh ${CHAOS_MESH_VERSION} and operator chart ${OPERATOR_CHART_VERSION}"
 echo "Remove it with: kind delete cluster --name ${CLUSTER}"

@@ -63,9 +63,10 @@ All inputs are environment variables; defaults live in `src/chaos/spec.ts`.
 | `OUT`                        | `chaos/out/<run-id>`                              | Output directory                                       |
 
 `chaos-env.sh` reads `KIND_CLUSTER`, `KIND_IMAGE`, `CHAOS_MESH_VERSION`, and
-`OPERATOR_CHART_VERSION`. The driver's no-progress watchdog gets half the
-completion allowance: long enough to tolerate a fault window, short enough to
-dump invocation diagnostics when verification wedges.
+`OPERATOR_CHART_VERSION`; the last defaults to the latest published chart, and
+the installed version is printed. The driver's no-progress watchdog gets half
+the completion allowance: long enough to tolerate a fault window, short enough
+to dump invocation diagnostics when verification wedges.
 
 For a quick local check, shrink the run: `CHAOS_SECONDS=130
 COMPLETION_TIMEOUT_SECONDS=600` still yields two injections at a 60s interval.
